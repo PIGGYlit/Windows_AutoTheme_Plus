@@ -2,7 +2,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 // Microsoft Store应用ID
 const STORE_APP_ID = "9N7ND584TDV1";
 
-type storePage = 'pdp' | 'review';
+type storePage = 'pdp' | 'review' | 'downloadsandupdates';
 export const openStoreRating = async (page?: storePage) => {
   const type = page || 'pdp';
   const url = `ms-windows-store://${type}/?ProductId=${STORE_APP_ID}`;

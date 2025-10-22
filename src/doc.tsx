@@ -1,15 +1,17 @@
 import React from 'react';
 import { Button, Divider, Tooltip, Typography } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
-
+import StoreLogo from "./assets/StoreLogo.svg?react";
+import { openStoreRating } from './mod/openStoreRating';
 const { Paragraph, Link, Text } = Typography;
 
 interface Props {
     locale: any
     version: string
     Weather: string
+    isWin64App: boolean
 }
-const App: React.FC<Props> = ({ locale, version, Weather }) => (
+const App: React.FC<Props> = ({ locale, version, Weather, isWin64App }) => (
     <Typography>
         {Weather ? (
             <>
@@ -23,7 +25,6 @@ const App: React.FC<Props> = ({ locale, version, Weather }) => (
                 </Paragraph>
             </>
         ) : null}
-
         <Divider style={{ margin: 0 }}><Text type="secondary"> v{version}</Text> </Divider>
         <Paragraph type="secondary">
             <Tooltip title={locale?.doc?.[2]}>
@@ -33,6 +34,17 @@ const App: React.FC<Props> = ({ locale, version, Weather }) => (
                     variant="link" />
             </Tooltip>
             {locale?.doc?.[3]}
+            {
+                isWin64App &&
+                <><Button
+                    type='text'
+                    icon={<StoreLogo />}
+                    variant="link"
+                     onClick={() => openStoreRating()}
+                    />
+                    <Divider style={{ marginInline: 6 }} type='vertical' />
+                </>
+            }
             <Link
                 target='_blank'
                 href='https://github.com/tuyangJs/Windows_AutoTheme'
@@ -46,6 +58,7 @@ const App: React.FC<Props> = ({ locale, version, Weather }) => (
             >{' '}
                 Gitee
             </Link>
+
         </Paragraph>
     </Typography>
 );

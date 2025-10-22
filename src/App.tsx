@@ -17,7 +17,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { AppDataType } from "./Type";
 import { getVersion } from '@tauri-apps/api/app';
 import { isEnabled } from "@tauri-apps/plugin-autostart";
-
 import { MainWindow, WindowBg } from "./mod/WindowCode";
 import { listen } from "@tauri-apps/api/event";
 import { adjustTime } from "./mod/adjustTime";
@@ -49,8 +48,6 @@ function App() {
   const [MainShow, setMainShow] = useState(document.visibilityState === 'visible')
   const [isWin64App, setIsWin64App] = useState(false)
   const [messageApi, contextHolder] = message.useMessage();
-
-
   const { Language, locale } = LanguageApp({ AppData, setData })
   //----EDN ---- Language
   useAsyncEffect(async () => {
@@ -118,12 +115,12 @@ function App() {
     }
   }, [AppData?.times, AppData?.open])
   useEffect(() => {
-    if (AppData?.rawTime?.length === 2) {
+    if (AppData?.rawTime?.length === 2 && AppData?.rcrl) {
       const rise = adjustTime(AppData?.rawTime[0], AppData?.deviation)
       const sun = adjustTime(AppData?.rawTime[1], -AppData?.deviation)
       setData({ times: [rise, sun] })
     }
-  }, [AppData?.rawTime, AppData?.deviation])
+  }, [AppData?.rawTime, AppData?.deviation, AppData?.rcrl])
   useEffect(() => { //自动化获取日出日落数据
     if (AppData?.rcrl) {
       openRc()
@@ -280,7 +277,7 @@ function App() {
                       {...animationVariants}
                       key={`${AppData?.language}-s`}
                     >
-                      <Docs locale={locale} version={version} Weather={Weather} />
+                      <Docs isWin64App={isWin64App} locale={locale} version={version} Weather={Weather} />
                     </motion.div>
                   </AnimatePresence>
                   <AnimatePresence>
@@ -289,7 +286,7 @@ function App() {
                       key={`${AppData?.language}-a`}
                     >
                       {isWin64App ? <a
-                        onClick={() => openStoreRating()}
+                        onClick={() => openStoreRating("downloadsandupdates")}
                         rel="noreferrer">{
                           locale?.upModal?.textB?.[2]
                         }</a> :

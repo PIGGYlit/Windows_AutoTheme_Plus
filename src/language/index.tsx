@@ -1,6 +1,7 @@
 import { Button, Dropdown } from "antd";
 import type { AppDataType } from '../Type';
 import { useEffect, useState } from "react";
+import { ItemType } from "antd/es/menu/interface";
 interface LanguageItem {
   key: string;
   label: string;
@@ -52,7 +53,7 @@ const Language = ({ AppData, setData }: Props) => {
     Language: (
       <Dropdown
         menu={{
-          items: languageItems,
+          items: languageItems as ItemType[],
           onClick: ({ key }) => setData({ language: key })
         }}
         placement="bottom"
