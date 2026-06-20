@@ -14,7 +14,6 @@ import OpContent from './Content'
 import { CrontabTask, CrontabManager } from './mod/Crontab'
 import { invoke } from "@tauri-apps/api/core";
 import { AppDataType } from "./Type";
-import { getVersion } from '@tauri-apps/api/app';
 import { isEnabled } from "@tauri-apps/plugin-autostart";
 import { WindowBg, initWindow, waitForTauri } from "./mod/WindowCode";
 import { listen } from "@tauri-apps/api/event";
@@ -23,16 +22,8 @@ import { Updates } from "./updates";
 import { applyTheme } from "./mod/applyTheme";
 import { logger } from "./mod/utils/logger";
 
-async function fetchAppVersion() {
-  try {
-    const version = await getVersion();
-    return version
-    // 在需要的地方使用版本号，例如显示在界面上
-  } catch (error) {
-    return '0.1.1'
-  }
-}
-const version = await fetchAppVersion();
+declare const __APP_VERSION__: string;
+const version = __APP_VERSION__;
 try { window.Webview?.show() } catch {};
 
 const { Content } = Layout;
