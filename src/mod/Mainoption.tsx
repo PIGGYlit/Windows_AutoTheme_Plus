@@ -1,17 +1,13 @@
 import { enable, disable } from "@tauri-apps/plugin-autostart"
-import { Input, AutoComplete, AutoCompleteProps, TimePicker, Button, Flex, Segmented, Tooltip, Space } from "antd"
+import { TimePicker, Button, Segmented, Tooltip, Space } from "antd"
 import dayjs from "dayjs"
-import { AppCiti, getLocation, Sunrise } from "./sociti"
-import { positionType, TimesProps } from "../Type"
+import { TimesProps } from "../Type"
 import type { MessageInstance } from "antd/es/message/interface"
-import { useRequest, useUpdateEffect } from "ahooks"
+
 import { useEffect, useState } from "react"
-import { EnvironmentOutlined, LoadingOutlined, QuestionOutlined } from "@ant-design/icons"
+import { QuestionOutlined } from "@ant-design/icons"
 import { invoke } from "@tauri-apps/api/core"
-import { isWin11 } from "./ThemeConfig"
-import Deviation from "./Deviation"
-import { openUrl } from "@tauri-apps/plugin-opener"
-import { formatCityDisplayByHierarchy } from "./searchCiti"
+import { getIsWin11 } from "./ThemeConfig"
 import ThemeSelector from "../com/ThemeSelector"
 import DataSave from "./DataSave"
 export interface mainsType {
@@ -29,44 +25,25 @@ export interface mainsType {
 export type MainopType = (e: {
     messageApi: MessageInstance;
     locale: any;
-    options: AutoCompleteProps['options']
-    getCity: (search?: string) => Promise<void>
-    Language: JSX.Element
     themeDack: boolean
+    tauriReady: boolean
 }) => {
-    openRc: () => Promise<void>,
-    mains: mainsType[],
-    CitiInit: (citiids?: positionType) => Promise<void>
+    mains: mainsType[]
 }
-
 
 const format = 'HH:mm';
 const { RangePicker } = TimePicker;
-const isWin64App = await invoke<boolean>('is_running_in_msix');
 const Mainoption: MainopType = ({
     messageApi,
     locale,
-    options,
-    getCity,
-    Language,
-    themeDack
+    themeDack,
+    tauriReady
 }) => {
     const { setData, AppData } = DataSave()
-    const [rcOpenLoad, setRcOpenLoad] = useState(false)
     const [startOpenLoad, setStartOpenLoad] = useState(false)
-    const [CitiLoad, setCitiLoad] = useState(false)
-    const [Citiname, setCitiname] = useState(AppData?.city?.name)
     const [openThemeSelector, setOpenThemeSelector] = useState(false)
-    const confirmCiti = (_e: any, err: any) => { //确认选择城市
-        console.log(err);
-        setData({ city: { position: err.position, name: err.value } })
-        setCitiname(err.value)
-    }
-
-    const { run } = useRequest(getCity, {
-        debounceWait: 800,
-        manual: true,
-    });
+    const [win11, setWin11] = useState(false);
+    useEffect(() => { getIsWin11().then(setWin11); }, []);
     const upTary = (e: string) => { //更新托盘数据
         invoke('update_tray_menu_item_title', {
             quit: locale?.quit,
@@ -75,69 +52,13 @@ const Mainoption: MainopType = ({
             switch: `${locale?.switch}${themeDack ? locale.light : locale.dark}`
         })
     }
-    const openRc = async () => { //处理日出日落数据
-        setRcOpenLoad(true)
-        if (AppData?.city?.position) {
-            const data = await Sunrise(AppData?.city?.position)
-            if (data?.rise && data?.set) {
-                const rise = data.rise
-                const sun = data.set
-                setData({ rawTime: [rise, sun], rcrl: true })
-                setRcOpenLoad(false)
-            } else {
-                messageApi.error(locale.main?.TabsOptionAError) //获取日出日落数据失败
-                    .then(() => {
-                        setData({ rcrl: false })
-                        setRcOpenLoad(false)
-                    })
-            }
-        } else {
-            CitiInit()
-        }
-
-    }
-
-    const CitiInit = async (citiids?: positionType) => {
-        setCitiLoad(true)
-        if (AppData?.language) { //必须初始语言才会开始自动获取定位
-            //const citiID = citiids ? { hid: citiids } : await Sunrise('', AppData?.language)
-            let citiID: positionType | undefined = citiids
-            if (!citiids) {
-                citiID = await getLocation()
-                if (!citiID) {
-                    messageApi.error(locale.main?.TabsOptionBError) //获取定位数据失败
-                        .then(() => {
-                            setData({ city: { name: '' } })
-                            setCitiLoad(false)
-                        })
-                    return
-                }
-            }
-            if (citiID?.lng) {
-                const Citiop = await AppCiti(`${citiID.lng},${citiID.lat}`, AppData?.language)
-                const err = Citiop.location?.[0]
-                console.log(err);
-
-                const names = formatCityDisplayByHierarchy(err)
-                setCitiname(names)
-                setData({ city: { position: citiID, name: names }, rcrl: true })
-            }
-
-        }
-        setCitiLoad(false)
-    }
-
     useEffect(() => {
+        if (!tauriReady) return
         if (locale?.quit) {
             const tooltip = `${locale?.Title} - App \n${locale.Time}: ${AppData?.times?.[0]} - ${AppData?.times?.[1]}`
             upTary(tooltip)
         }
-
-    }, [locale, AppData?.times, themeDack])
-    useUpdateEffect(() => { //只要首次运行时才会启动
-        run()
-        CitiInit(AppData?.city?.position)
-    }, [AppData?.language])
+    }, [locale, AppData?.times, themeDack, tauriReady])
     const AutostartOpen = async (e: boolean) => {
         setStartOpenLoad(true)
         try {
@@ -157,39 +78,11 @@ const Mainoption: MainopType = ({
     }
     const startTime = dayjs(AppData?.times?.[0] || '08:08', 'HH:mm')
     const endTime = dayjs(AppData?.times?.[1] || '18:08', 'HH:mm')
-    const Citidiv = ( //城市选择器
-        <Flex gap={4}
-            style={{ maxWidth: 320 }}
-        >
-            <Button type="text"
-                disabled={!AppData?.rcrl || CitiLoad}
-                color="default"
-                //variant="filled"
-                onClick={() => CitiInit()}
-                icon={CitiLoad ? <LoadingOutlined /> : <EnvironmentOutlined />}
-            />
-            <AutoComplete
-                popupMatchSelectWidth={280}
-                options={options}
-                value={Citiname}
-                onSelect={confirmCiti}
-                onChange={run}
-                disabled={!AppData?.rcrl || CitiLoad}
-            >
-                <Input
-                    disabled={CitiLoad}
-                    variant="filled"
-                    onChange={e => setCitiname(e.target.value)}
-                    placeholder={locale?.main?.citiPlaceholder} />
-            </AutoComplete>
-        </Flex>
-    )
-    const Times: React.FC<TimesProps> = ({ disabled }) => ( //渲染时间选择器
+    const Times: React.FC<TimesProps> = () => ( //渲染时间选择器
         <RangePicker
             variant="filled"
-            disabled={disabled}
             style={{ width: 200 }}
-            defaultValue={[startTime, endTime]}
+            value={[startTime, endTime]}
             format={format}
             onChange={handleTimeChange} />
     );
@@ -204,58 +97,23 @@ const Mainoption: MainopType = ({
             }
         },
         {
-            key: "language",
-            label: locale?.main?.language,
-            change: Language
-        },
-
-        {
-            key: "rcrl",
-            label: locale?.main?.TabsOptionA,
-            value: AppData?.rcrl,
-            loading: rcOpenLoad,
-            change: (e: boolean) => {
-                setData({ rcrl: e })
-            }
-        },
-        {
-            key: 'city',
-            label: locale?.main?.citiTitle,
-            hide: !AppData?.rcrl,
-            change: Citidiv
-        },
-        {
-            key: 'deviation',
-            label: locale?.main?.deviationTitle,
-            hide: !AppData?.rcrl,
-            change: <Deviation
-                value={AppData?.deviation || 20}
-                setVal={(e) => {
-                    setData({ deviation: e });
-                }}
-                prompt={
-                    <>
-                        {locale?.main?.deviationPrompt}
-                        <br />
-                        {
-                            `${locale?.main?.TabsOptionB}: 
-                           ${AppData?.rawTime[0]} - ${AppData?.rawTime[1]}
-                           `
-                        }
-                        <br />
-                        {
-                            ` ${locale?.main?.deviationTitle}: 
-                                ${AppData?.times?.[0]} - ${AppData?.times?.[1]} `
-                        }
-                    </>
-                }
+            key: 'mode',
+            label: locale?.main?.mode,
+            change: <Segmented
+                shape="round"
+                value={AppData?.mode || 'system'}
+                onChange={e => setData({ mode: e as 'system' | 'manual' })}
+                options={[
+                    { value: 'system', label: locale?.main?.modeSystem },
+                    { value: 'manual', label: locale?.main?.modeManual },
+                ]}
             />
         },
         {
             key: 'dark',
             label: locale?.main?.TabsOptionB,
-            hide: AppData?.rcrl,
-            change: <Times disabled={AppData?.rcrl} /> // 渲染时间选择器
+            hide: AppData?.mode === 'system',
+            change: <Times />
         },
         {
             key: "switchStyemMode",
@@ -287,8 +145,8 @@ const Mainoption: MainopType = ({
                 }
                 options={[
                     { value: 'Default', label: locale?.main?.Default },
-                    { value: 'Mica', label: locale?.main?.Mica, disabled: !isWin11 },
-                    { value: 'Acrylic', label: locale?.main?.Acrylic, disabled: !isWin11 },
+                    { value: 'Mica', label: locale?.main?.Mica, disabled: !win11 },
+                    { value: 'Acrylic', label: locale?.main?.Acrylic, disabled: !win11 },
                 ]}
             />
         },
@@ -297,12 +155,7 @@ const Mainoption: MainopType = ({
             label: locale?.main?.Autostart,
             value: AppData?.Autostart,
             loading: startOpenLoad,
-            change: isWin64App ?
-                (
-                    <Tooltip title={locale?.main?.AutostartTip}>
-                        <Button onClick={() => openUrl("ms-settings:startupapps")}>{locale?.main?.AutostartBtn}</Button>
-                    </Tooltip>
-                ) : AutostartOpen,
+            change: AutostartOpen,
         },
         {
             key: "StartShow",
@@ -311,7 +164,7 @@ const Mainoption: MainopType = ({
             change: ((e: boolean) => setData({ StartShow: e }))
         }
     ];
-    return { openRc, mains, CitiInit }
+    return { mains }
 }
 
 export default Mainoption

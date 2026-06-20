@@ -1,4 +1,3 @@
-// 使用模块中的类型
 mod theme_apply;
 mod windows_themes;
 use std::ffi::OsStr;
@@ -6,6 +5,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::ptr;
 use std::sync::Mutex;
 use tauri::command;
+
 
 use crate::windows_themes::ThemeInfo;
 use tauri::window::{Effect, EffectState, EffectsBuilder};
@@ -20,11 +20,13 @@ use theme_apply::ThemeApplier;
 use tokio::time::{sleep, Duration};
 use winapi::shared::minwindef::{DWORD, HKEY};
 use winapi::shared::winerror::ERROR_SUCCESS;
-use winapi::um::winreg::{RegOpenKeyExW, RegSetValueExW, HKEY_CURRENT_USER};
+use winapi::um::winreg::{RegCloseKey, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY_CURRENT_USER};
 use winapi::{
     ctypes::c_void,
     um::winuser::{SendMessageTimeoutW, HWND_BROADCAST, WM_SETTINGCHANGE},
 };
+
+
 struct AppState {
     tray: Mutex<Option<TrayIcon>>,
 }
@@ -99,12 +101,14 @@ fn set_registry_value(reg_path: &str, value_name: &str, value: u32) -> Result<()
         );
 
         if result != ERROR_SUCCESS as i32 {
+            RegCloseKey(hkey);
             return Err(format!(
                 "Failed to set registry value. Error code: {}",
                 result
             ));
         }
 
+        RegCloseKey(hkey);
         Ok(())
     }
 }
@@ -128,11 +132,9 @@ async fn set_system_theme(is_light: bool) {
 fn send_event(app_handle: &AppHandle) {
     app_handle.emit("close-app", "quit").unwrap();
     let app_handle_clone = app_handle.clone();
-    // 等待 3 秒
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         sleep(Duration::from_millis(3000)).await;
         app_handle_clone.exit(0);
-        // 如果到达 3 秒后，程序还未结束，强制退出
     });
 }
 fn create_system_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -247,15 +249,64 @@ fn update_tray_menu_item_title(
         println!("托盘标题已更新");
     }
 }
-#[tauri::command]
-fn is_running_in_msix() -> bool {
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(dir) = exe_path.parent() {
-            let dir_str = dir.to_string_lossy().to_lowercase();
-            return dir_str.starts_with(r"c:\program files\windowsapps");
+/// 读取 CloudStore 注册表二进制数据
+fn read_cloudstore_data(sub_key: &str) -> Vec<u8> {
+    unsafe {
+        let key_wide: Vec<u16> = OsStr::new(sub_key).encode_wide().chain(Some(0)).collect();
+        let mut key_handle: HKEY = ptr::null_mut();
+        let status = RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            key_wide.as_ptr(),
+            0,
+            winapi::um::winnt::KEY_READ,
+            &mut key_handle,
+        );
+        if status != ERROR_SUCCESS as i32 {
+            return Vec::new();
+        }
+        let name_wide: Vec<u16> = OsStr::new("Data").encode_wide().chain(Some(0)).collect();
+        let mut value_size: DWORD = 0;
+        RegQueryValueExW(
+            key_handle,
+            name_wide.as_ptr(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut value_size,
+        );
+        if value_size == 0 {
+            RegCloseKey(key_handle);
+            return Vec::new();
+        }
+        let mut buffer = vec![0u8; value_size as usize];
+        let mut result_size = value_size;
+        let result = RegQueryValueExW(
+            key_handle,
+            name_wide.as_ptr(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            buffer.as_mut_ptr(),
+            &mut result_size,
+        );
+        RegCloseKey(key_handle);
+        if result == ERROR_SUCCESS as i32 {
+            buffer.truncate(result_size as usize);
+            buffer
+        } else {
+            Vec::new()
         }
     }
-    false
+}
+
+/// 检测 Windows 夜灯（护眼模式）是否开启
+/// 读取 CloudStore 注册表数据，byte[35] = 1 表示开启
+#[tauri::command]
+fn get_night_light_state() -> bool {
+    let sub_key = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\default$windows.data.bluelightreduction.bluelightreductionstate\\windows.data.bluelightreduction.bluelightreductionstate";
+    let data = read_cloudstore_data(sub_key);
+    let is_on = data.len() > 35 && data[35] == 1;
+    eprintln!("[night_light] len={}, byte[35]={}, is_on={}", data.len(), data.get(35).copied().unwrap_or(99), is_on);
+    is_on
 }
 /// Read a single preview file and return as data URL (base64).
 
@@ -265,7 +316,6 @@ async fn get_windows_themes() -> Vec<ThemeInfo> {
         .await
         .unwrap_or_default()
 }
-// Tauri 命令：应用主题（静默，不显示窗口）
 #[tauri::command]
 async fn apply_theme(theme_path: String) -> Result<(), String> {
     crate::ThemeApplier::apply_theme_by_path(&theme_path)
@@ -273,68 +323,67 @@ async fn apply_theme(theme_path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        tauri::Builder::default()
-            .plugin(tauri_plugin_fs::init())
-            .plugin(tauri_plugin_os::init())
-            .plugin(tauri_plugin_persisted_scope::init())
-            .plugin(
-                tauri_plugin_log::Builder::new()
-                    .targets([
-                        Target::new(TargetKind::Folder {
-                            path: std::path::PathBuf::from("/logs"),
-                            file_name: Some("app.log".to_string()),
-                        }),
-                        Target::new(TargetKind::Stdout),
-                        Target::new(TargetKind::LogDir { file_name: None }),
-                        Target::new(TargetKind::Webview),
-                    ])
-                    .build(),
-            )
-            .setup(|app| -> Result<(), Box<dyn std::error::Error>> {
-                let app_handle = app.handle();
-                let main_window = app_handle
-                    .get_webview_window("main")
-                    .expect("Failed to get the main window");
-                main_window.hide().expect("Failed to hide the window");
-                main_window
-                    .set_always_on_top(false)
-                    .expect("Failed to set always on top");
-                main_window
-                    .set_effects(
-                        EffectsBuilder::new()
-                            .effect(Effect::Mica)
-                            .state(EffectState::FollowsWindowActiveState)
-                            .build(),
-                    )
-                    .expect("Failed to set window effect");
-                main_window.set_shadow(true).expect("Failed to set shadow");
-                create_system_tray(&app_handle)?;
-                Ok(())
-            })
-            .plugin(tauri_plugin_persisted_scope::init())
-            .plugin(tauri_plugin_window_state::Builder::new().build())
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                show_window(app);
-            }))
-            .plugin(tauri_plugin_autostart::init(
-                MacosLauncher::LaunchAgent,
-                None,
-            ))
-            .plugin(tauri_plugin_http::init())
-            .plugin(tauri_plugin_opener::init())
-            .manage(AppState {
-                tray: Mutex::new(None),
-            })
-            .invoke_handler(tauri::generate_handler![
-                set_system_theme,
-                update_tray_menu_item_title,
-                is_running_in_msix,
-                get_windows_themes,
-                apply_theme,
-            ])
-            .run(tauri::generate_context!())
-            .expect("error while running tauri application");
-    });
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_persisted_scope::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Folder {
+                        path: std::path::PathBuf::from("/logs"),
+                        file_name: Some("app.log".to_string()),
+                    }),
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .build(),
+        )
+        .setup(|app| -> Result<(), Box<dyn std::error::Error>> {
+            let app_handle = app.handle();
+            let main_window = app_handle
+                .get_webview_window("main")
+                .expect("Failed to get the main window");
+            main_window.hide().expect("Failed to hide the window");
+            main_window
+                .set_always_on_top(false)
+                .expect("Failed to set always on top");
+            main_window
+                .set_effects(
+                    EffectsBuilder::new()
+                        .effect(Effect::Mica)
+                        .state(EffectState::FollowsWindowActiveState)
+                        .build(),
+                )
+                .expect("Failed to set window effect");
+            main_window.set_shadow(true).expect("Failed to set shadow");
+
+
+
+            create_system_tray(&app_handle)?;
+            Ok(())
+        })
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_window(app);
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
+        .manage(AppState {
+            tray: Mutex::new(None),
+        })
+        .invoke_handler(tauri::generate_handler![
+            set_system_theme,
+            update_tray_menu_item_title,
+            get_night_light_state,
+            get_windows_themes,
+            apply_theme,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

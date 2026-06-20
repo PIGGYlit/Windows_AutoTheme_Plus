@@ -6,7 +6,6 @@ import Logo from "./assets/logo.svg?react";
 import { Window } from '@tauri-apps/api/window'; // 引入 appWindow
 //import { motion } from 'framer-motion'; // 引入 framer-motion
 import { invoke } from "@tauri-apps/api/core";
-import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state';
 import Close from "./assets/closed.svg?react";
 import Mins from './assets/min.svg?react';
 import usePageTitle from './mod/PageTitle'
@@ -21,12 +20,6 @@ interface Props {
     Themeconfig: ThemeConfig
 }
 const appWindow = new Window('main');
-let WinS = true
-
-if (WinS) {
-    WinS = false
-    restoreStateCurrent(StateFlags.ALL);
-}
 
 
 
@@ -54,6 +47,8 @@ const TitleButton: ButtonProps[] = [
 ]
 const upWindowTitle = async (PageTitle: string) => {
     if (typeof PageTitle === "string") {
+        const { waitForTauri } = await import('./mod/WindowCode');
+        await waitForTauri();
         await appWindow.setTitle(PageTitle)
     }
 }
@@ -66,14 +61,25 @@ const App: React.FC<Props> = ({ config, Themeconfig, themeDack, locale, setSpinn
     useAsyncEffect(async () => {
         run(PageTitle)
     }, [PageTitle])
+    useAsyncEffect(async () => {
+        try {
+            const { waitForTauri } = await import('./mod/WindowCode');
+            await waitForTauri();
+            const { restoreStateCurrent, StateFlags } = await import('@tauri-apps/plugin-window-state');
+            restoreStateCurrent(StateFlags.ALL);
+        } catch (e) {
+            console.warn('restoreStateCurrent failed:', e)
+        }
+    }, [])
     async function changeTheme() {
         try {
             setSpinning(true)
             await invoke('set_system_theme', { isLight: themeDack });
-            //setThemeDack(!themeDack)
             console.log('主题切换到:', themeDack);
         } catch (error) {
             console.error('Error changing theme:', error);
+        } finally {
+            setSpinning(false)
         }
     }
     //更新窗口标题

@@ -44,13 +44,7 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         {
-          "url": "ms-windows-store://*"
-        },
-        {
           "url": "ms-settings:*"
-        },
-        {
-          "url": "https://apps.microsoft.com/*"
         }
       ]
     },
@@ -58,21 +52,10 @@
       "identifier": "http:default",
       "allow": [
         {
+          "url": "https://p54nmvdbug.re.qweatherapi.com/**"
+        },
+        {
           "url": "https://*.qweather.com"
-        },
-        {
-          "url": "https://api.sunrise-sunset.org"
-        },
-        {
-          "url": "http://demo.ip-api.com/**"
-        }
-      ],
-      "deny": [
-        {
-          "url": "https://api.qweather.com"
-        },
-        {
-          "url": "https://*.ip-api.com"
         }
       ]
     }

@@ -75,13 +75,12 @@ export function useLocalImageUrl(path?: string): { src: string; loading: boolean
 
     return () => {
       mounted = false;
-      // release one refCount — 不立即 revoke URL（避免短时间切换导致重复创建）
+      // release one refCount
       const count = refCount.get(path) || 0;
       if (count <= 1) {
         refCount.delete(path);
-        // optional: 延迟 revoke，或在全局清理时 revoke
-        // const url = objectUrlCache.get(path);
-        // if (url) { URL.revokeObjectURL(url); objectUrlCache.delete(path); }
+        const url = objectUrlCache.get(path);
+        if (url) { URL.revokeObjectURL(url); objectUrlCache.delete(path); }
       } else {
         refCount.set(path, count - 1);
       }

@@ -16,7 +16,7 @@ const Content: React.FC<props> = ({ mains, language }) => (
             if (item.hide) return null;
 
             // 确保每个item都有唯一key，优先使用item.key，否则使用索引和随机数组合
-            const uniqueKey = item.key ? `${item.key}-${language}` : `${i}-${language}-${Math.random()}`;
+            const uniqueKey = item.key ? `${item.key}-${language}` : `${i}-${language}`;
             return (
                 <motion.div
                     key={uniqueKey}

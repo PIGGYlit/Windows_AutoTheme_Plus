@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import TitleBar from "./TitleBar";
 import dayjs from 'dayjs';
 import "./App.css";
-import { AutoCompleteProps, ConfigProvider, Flex, Layout, message, Spin } from "antd";
-import { useUpdateEffect, useAsyncEffect } from "ahooks";
+import { ConfigProvider, Flex, Layout, message, Spin } from "antd";
+import { useUpdateEffect } from "ahooks";
 import LanguageApp from './language/index'
 import Docs from './doc'
 import { LoadingOutlined } from "@ant-design/icons";
@@ -12,21 +12,16 @@ import Mainoption from "./mod/Mainoption";
 import DataSave from './mod/DataSave'
 import OpContent from './Content'
 import { CrontabTask, CrontabManager } from './mod/Crontab'
-import { searchResult } from "./mod/searchCiti";
 import { invoke } from "@tauri-apps/api/core";
 import { AppDataType } from "./Type";
 import { getVersion } from '@tauri-apps/api/app';
 import { isEnabled } from "@tauri-apps/plugin-autostart";
-import { WindowBg } from "./mod/WindowCode";
+import { WindowBg, initWindow, waitForTauri } from "./mod/WindowCode";
 import { listen } from "@tauri-apps/api/event";
-import { adjustTime } from "./mod/adjustTime";
 import { AnimatePresence, motion } from "framer-motion";
-import { GetHttp } from "./mod/sociti";
-import RatingPrompt from "./mod/RatingPrompt";
-import { openStoreRating } from "./mod/openStoreRating";
 import { Updates } from "./updates";
 import { applyTheme } from "./mod/applyTheme";
-GetHttp("https://dev.qweather.com/")
+import { info, warn } from "@tauri-apps/plugin-log";
 async function fetchAppVersion() {
   try {
     const version = await getVersion();
@@ -37,48 +32,53 @@ async function fetchAppVersion() {
   }
 }
 const version = await fetchAppVersion();
-window.Webview.show()
+try { window.Webview?.show() } catch {};
 
 const { Content } = Layout;
 function App() {
   const { setData, AppData } = DataSave()
   const matchMedia = window.matchMedia('(prefers-color-scheme: light)');
   const [themeDack, setThemeDack] = useState(!matchMedia.matches);
-  const [options, setOptions] = useState<AutoCompleteProps['options']>([]);
   const [spinning, setSpinning] = useState(true)
-  const [isWin64App, setIsWin64App] = useState(false)
+  const [tauriReady, setTauriReady] = useState(false)
   const [messageApi, contextHolder] = message.useMessage();
-  const { Language, locale } = LanguageApp({ AppData, setData })
-  //----EDN ---- Language
-  useAsyncEffect(async () => {
-    const inMsix = await invoke<boolean>('is_running_in_msix');
-    setIsWin64App(inMsix)
+  const { locale } = LanguageApp({ AppData, setData })
+
+  useEffect(() => {
+    waitForTauri().then(() => {
+      setTauriReady(true)
+      setSpinning(false)
+      initWindow()
+      setTimeout(async () => {
+        if (!window.appWindow) return
+        const isVisible = await window.appWindow.isVisible()
+        if (isVisible) {
+          window.Webview?.show()
+        } else {
+          window.Webview?.hide()
+        }
+      }, 3000);
+    })
   }, [])
 
   useEffect(() => {
-    setTimeout(async () => {
-      const isVisible = await window.appWindow.isVisible()
-      if (isVisible) {
-        window.Webview.show()
-      } else {
-        window.Webview.hide()
-      }
-    }, 3000);
+    const timer = setTimeout(() => setSpinning(false), 5000)
+    return () => clearTimeout(timer)
   }, [])
 
   //导入设置选项
-  const { openRc, mains, CitiInit } = Mainoption({
+  const { mains } = Mainoption({
     messageApi,
     locale,
-    options,
-    getCity,
-    Language,
-    themeDack
+    themeDack,
+    tauriReady
   })
   useEffect(() => {
+    if (!tauriReady) return
     let isMounted = true;
     const setupListener = async () => {
-      const unlisten = await listen("switch", async () => {
+      try {
+        const unlisten = await listen("switch", async () => {
         if (!isMounted) return;
         console.log("switch dark", !themeDack);
         if (spinning) return;
@@ -88,19 +88,18 @@ function App() {
           await invoke('set_system_theme', { isLight: themeDack });
         }, 10);
         if (!isVisible) {
-          window.Webview.show()
+          window.Webview?.show()
           setTimeout(() => {
             window.appWindow.isVisible().then(async (_isVisible) => {
               console.log("isVisible", _isVisible);
               if (!_isVisible) {
-                window.Webview.hide()
+                window.Webview?.hide()
               }
             })
           }, 600);
         }
       });
 
-      // 返回清理函数以移除事件监听器
       return () => {
         isMounted = false;
         if (unlisten) {
@@ -111,72 +110,93 @@ function App() {
           }
         }
       };
-    };
+    } catch (e) {
+      console.warn('Failed to setup listener:', e);
+      return () => {};
+    }
+  };
     const cleanupPromise = setupListener();
 
-    // 返回一个清理函数来处理异步操作的清理
     return () => {
-      cleanupPromise.then(cleanup => cleanup());
+      cleanupPromise.then(cleanup => cleanup(), () => {});
     };
-  }, [themeDack, spinning]);
+  }, [themeDack, spinning, tauriReady]);
 
   useUpdateEffect(() => {
-    if (AppData?.open) {
+    if (!tauriReady) return
+    if (AppData?.open && AppData?.mode === 'manual') {
       StartRady()
     }
-  }, [AppData?.times, AppData?.open, AppData?.StyemThemeEnable])
-  useEffect(() => {
-    if (AppData?.rawTime?.length === 2 && AppData?.rcrl) {
-      const rise = adjustTime(AppData?.rawTime[0], AppData?.deviation)
-      const sun = adjustTime(AppData?.rawTime[1], -AppData?.deviation)
-      setData({ times: [rise, sun] })
-    }
-  }, [AppData?.rawTime, AppData?.deviation, AppData?.rcrl])
-  useEffect(() => { //自动化获取日出日落数据
-    if (AppData?.rcrl) {
-      openRc()
-    }
-  }, [AppData?.city, AppData?.rcrl])
+  }, [AppData?.times, AppData?.open, AppData?.mode, AppData?.StyemThemeEnable, tauriReady])
   //设置窗口材料
   useEffect(() => {
+    if (!tauriReady) return
     WindowBg(AppData as AppDataType, themeDack)
-  }, [AppData?.winBgEffect, themeDack])
+  }, [AppData?.winBgEffect, themeDack, tauriReady])
   useEffect(() => { //初始化 -主题自适应
+    if (!tauriReady) return
     const handleChange = function (this: any) {
-      //appWindow.setTheme('')
       setThemeDack(!this.matches);
       setSpinning(false)
     };
     matchMedia.addEventListener('change', handleChange);
-    if (AppData?.open) {
+    if (AppData?.open && AppData?.mode === 'manual') {
       StartRady()
     }
     const isAutostart = async () => {
       setData({ Autostart: await isEnabled() })
     }
-    //检测开机启动
     isAutostart()
-    // 清除事件监听器
     setTimeout(() => {
       setSpinning(false)
     }, 100);
     return () => {
       matchMedia.removeEventListener('change', handleChange);
     };
-  }, []);
+  }, [tauriReady]);
+
+  useEffect(() => {
+    info(`[跟随系统] useEffect执行, mode=${AppData?.mode}, open=${AppData?.open}, tauriReady=${tauriReady}`);
+    if (!tauriReady || AppData?.mode !== 'system' || !AppData?.open) {
+      info('[跟随系统] 条件不满足，跳过轮询');
+      return;
+    }
+    info('[跟随系统] 启动轮询');
+    let isMounted = true;
+    let prevNightLight: boolean | null = null;
+    const checkTheme = async () => {
+      try {
+        const nightLightOn = await invoke<boolean>('get_night_light_state');
+        info(`[跟随系统] 夜灯状态: nightLightOn=${nightLightOn}, themeDack=${themeDack}, prevNightLight=${prevNightLight}`);
+        if (prevNightLight !== null && prevNightLight === nightLightOn) {
+          return;
+        }
+        prevNightLight = nightLightOn;
+        if (isMounted) {
+          const shouldBeDark = nightLightOn;
+          info(`[跟随系统] 夜灯${nightLightOn ? '开启' : '关闭'}，切换主题: dark=${shouldBeDark}`);
+          setThemeDack(shouldBeDark);
+          await invoke('set_system_theme', { isLight: !shouldBeDark });
+        }
+      } catch (e) {
+        warn(`[跟随系统] 获取夜灯状态失败: ${e}`);
+      }
+    };
+    checkTheme();
+    const timer = setInterval(checkTheme, 3000);
+    return () => {
+      info('[跟随系统] 清理轮询');
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [tauriReady, AppData?.mode, AppData?.open, themeDack]);
   const StartRady = async () => {
-    const presentTime = dayjs(); // 当前时间
-    const sunriseTime = dayjs(AppData?.times?.[0], 'HH:mm'); // 日出时间
-    const sunsetTime = dayjs(AppData?.times?.[1], 'HH:mm'); // 日落时间
+    const presentTime = dayjs();
+    const startTime = dayjs(AppData?.times?.[0], 'HH:mm');
+    const endTime = dayjs(AppData?.times?.[1], 'HH:mm');
     let isLight = false;
-    let message = '';
-    if (presentTime.isAfter(sunriseTime) && presentTime.isBefore(sunsetTime)) {
+    if (presentTime.isAfter(startTime) && presentTime.isBefore(endTime)) {
       isLight = true;
-      message = '现在是日出后，日落前';
-    } else if (presentTime.isBefore(sunriseTime)) {
-      message = '现在是日出前';
-    } else {
-      message = '现在是日落后';
     }
     if (themeDack === isLight) {
       setSpinning(true);
@@ -186,7 +206,6 @@ function App() {
           return
         }
         await invoke('set_system_theme', { isLight });
-        console.log(message);
       } finally {
         setSpinning(false);
       }
@@ -195,7 +214,7 @@ function App() {
 
 
   useEffect(() => { //定时任务处理
-    if (AppData?.open === false) {
+    if (AppData?.open === false || AppData?.mode !== 'manual') {
       CrontabManager.clearAllTasks()
       return
     }
@@ -221,7 +240,6 @@ function App() {
             break;
         }
         console.log(CrontabManager.listTasks());
-        CitiInit(AppData?.city?.position)
       };
       try {
         // 添加定时任务
@@ -237,8 +255,7 @@ function App() {
     return () => {
       CrontabManager.clearAllTasks()
     };
-  }, [AppData?.times, AppData?.open, AppData.StyemThemeEnable])
-
+  }, [AppData?.times, AppData?.open, AppData?.mode, AppData.StyemThemeEnable])
 
   useUpdateEffect(() => {
     console.log(AppData?.open, AppData.StyemThemeEnable);
@@ -249,10 +266,6 @@ function App() {
       applyTheme(AppData.StyemTheme[themeDack ? 1 : 0])
     }
   }, [themeDack, AppData?.open, AppData.StyemTheme, AppData.StyemThemeEnable])
-  async function getCity(search?: string) { //搜索城市
-    setOptions(await searchResult(search || '', AppData))
-  }
-
   const { Themeconfig, antdToken } = ThemeFun(themeDack, AppData?.winBgEffect)
   const animationVariants = (index: number) => ({
     initial: {
@@ -316,7 +329,7 @@ function App() {
                   transition={animationVariants(1).transition}
                   layout
                 >
-                  <Docs isWin64App={isWin64App} locale={locale} version={version} />
+                  <Docs locale={locale} version={version} />
                 </motion.div>
                 <motion.div
                   key={`update-${AppData?.language}`}
@@ -327,19 +340,12 @@ function App() {
                   transition={transitionConfig}
                   layout
                 >
-                  {isWin64App ? <a
-                    onClick={() => openStoreRating("downloadsandupdates")}
-                    rel="noreferrer">{
-                      locale?.upModal?.textB?.[1]
-                    }</a> :
-                    <Updates version={version} locale={locale} setData={setData} AppData={AppData} />
-                  }
+                  <Updates version={version} locale={locale} setData={setData} AppData={AppData} />
 
                 </motion.div>
               </AnimatePresence>
             </Flex>
-            { /* 评分组件 */}
-            {isWin64App && <RatingPrompt locale={locale} />}
+            
           </Content>
         </Layout>
       </Spin>

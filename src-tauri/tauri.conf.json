@@ -51,7 +51,7 @@
       "nsis"
     ],
     "copyright": "Copyright © 2025 Tuyang All",
-    "homepage": "https://github.com/tuyangJs/Windows_AutoTheme",
+    "homepage": "https://github.com/PIGGYlit/Windows_AutoTheme",
     "windows": {
       "nsis": {
         "languages": [

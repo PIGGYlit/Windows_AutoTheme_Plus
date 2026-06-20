@@ -21,6 +21,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+src-tauri/target/
+
+# Rust
 Cargo.lock
 package-lock.json
 src-tauri/Cargo.lock

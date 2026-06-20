@@ -33,7 +33,7 @@ export interface UpdateType {
   }
   
   export async function checkForUpdates(currentVersion: string): Promise<UpdateType | null> {
-    const repo = "tuyangJs/Windows_AutoTheme";
+    const repo = "PIGGYlit/Windows_AutoTheme";
     const apiUrl = `https://api.github.com/repos/${repo}/releases?per_page=100`;
     try {
       const response = await fetch(apiUrl);

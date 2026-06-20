@@ -89,21 +89,13 @@ const Updates: React.FC<Props> = ({ version, locale, setData, AppData }) => {
             {upModal?.noText}
           </Button>,
           <Button
-            key="submit"
-            type="primary"
-            href="https://gitee.com/ilinxuan/windows_-auto-theme/releases/latest"
-            target="_blank"
-            onClick={handleCancel}>
-            {upModal?.okText} (Gitee)
-          </Button>,
-          <Button
             key="link"
             href={update?.releaseUrl}
             target="_blank"
             type="primary"
             onClick={handleCancel}
           >
-            {upModal?.okText} (GitHub)
+            {upModal?.okText}
           </Button>,
         ]}
         maskClosable={false}
