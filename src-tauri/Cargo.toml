@@ -25,7 +25,7 @@ tauri = { version = "2", features = [ "tray-icon", "image-png" ] }
 serde_json = "1"
 tauri-plugin-http = "2"
 tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
-winapi = { version = "0.3", features = ["winuser", "winbase"] }
+winapi = { version = "0.3", features = ["winuser", "winbase", "winreg", "synchapi"] }
 chrono = "0.4"
 tauri-plugin-log = "2"
 log = "0.4"

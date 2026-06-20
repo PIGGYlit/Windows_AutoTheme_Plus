@@ -54,8 +54,52 @@ fn format_timestamp() -> String {
     format!("{:02}:{:02}:{:02}.{:03}", h, m, s, ms)
 }
 
+const CLOUDSTORE_SUBKEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\default$windows.data.bluelightreduction.bluelightreductionstate\\windows.data.bluelightreduction.bluelightreductionstate";
+
 struct AppState {
     tray: Mutex<Option<TrayIcon>>,
+}
+
+fn start_night_light_monitor(app_handle: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last_value: Option<bool> = None;
+        loop {
+            unsafe {
+                let key_wide: Vec<u16> = OsStr::new(CLOUDSTORE_SUBKEY).encode_wide().chain(Some(0)).collect();
+                let mut key_handle: HKEY = ptr::null_mut();
+                let status = RegOpenKeyExW(
+                    HKEY_CURRENT_USER,
+                    key_wide.as_ptr(),
+                    0,
+                    winapi::um::winnt::KEY_NOTIFY,
+                    &mut key_handle,
+                );
+                if status == 0 {
+                    winapi::um::winreg::RegNotifyChangeKeyValue(
+                        key_handle,
+                        0,
+                        winapi::um::winnt::REG_NOTIFY_CHANGE_LAST_SET,
+                        ptr::null_mut(),
+                        0,
+                    );
+                    RegCloseKey(key_handle);
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(5000));
+                }
+            }
+
+            let data = read_cloudstore_data(CLOUDSTORE_SUBKEY);
+            let parsed = parse_night_light_state(&data);
+            if let Some(is_on) = parsed {
+                let changed = last_value.map(|v| v != is_on).unwrap_or(true);
+                last_value = Some(is_on);
+                if changed {
+                    debug!("op=night_light_monitor | is_on={}", is_on);
+                    let _ = app_handle.emit("night-light-changed", is_on);
+                }
+            }
+        }
+    });
 }
 
 fn show_window(app: &AppHandle) {
@@ -349,15 +393,33 @@ fn read_cloudstore_data(sub_key: &str) -> Vec<u8> {
     }
 }
 
-/// 检测 Windows 夜灯（护眼模式）是否开启
-/// 读取 CloudStore 注册表数据，byte[35] = 1 表示开启
+const NIGHT_LIGHT_OFFSET: usize = 35;
+
+fn parse_night_light_state(data: &[u8]) -> Option<bool> {
+    if data.len() > NIGHT_LIGHT_OFFSET && data[NIGHT_LIGHT_OFFSET] <= 1 {
+        return Some(data[NIGHT_LIGHT_OFFSET] == 1);
+    }
+    for i in (20..data.len().min(64)).rev() {
+        if data[i] <= 1 {
+            warn!("op=night_light | action=fallback_offset | offset={} | val={}", i, data[i]);
+            return Some(data[i] == 1);
+        }
+    }
+    if !data.is_empty() {
+        warn!("op=night_light | action=unknown_format | len={} | first32={:02x?}", data.len(), &data[..data.len().min(32)]);
+        debug!("op=night_light | full_data={:02x?}", data);
+    }
+    None
+}
+
 #[tauri::command]
-fn get_night_light_state() -> bool {
-    let sub_key = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\default$windows.data.bluelightreduction.bluelightreductionstate\\windows.data.bluelightreduction.bluelightreductionstate";
-    let data = read_cloudstore_data(sub_key);
-    let is_on = data.len() > 35 && data[35] == 1;
-    debug!("op=night_light | len={} | byte35={} | is_on={}", data.len(), data.get(35).copied().unwrap_or(99), is_on);
-    is_on
+fn get_night_light_state() -> Result<bool, String> {
+    let data = read_cloudstore_data(CLOUDSTORE_SUBKEY);
+    if data.is_empty() {
+        return Err("无法读取夜灯状态: 注册表键打开失败或值为空".into());
+    }
+    debug!("op=night_light | len={} | first32={:02x?}", data.len(), &data[..data.len().min(32)]);
+    parse_night_light_state(&data).ok_or_else(|| "无法解析夜灯数据: 格式不兼容".into())
 }
 /// Read a single preview file and return as data URL (base64).
 
@@ -501,7 +563,8 @@ pub fn run() {
             main_window.set_shadow(true).expect("Failed to set shadow");
             debug!("op=setup | action=set_shadow | val=true | result=ok");
             create_system_tray(&app_handle)?;
-            info!("op=setup | status=end");
+            start_night_light_monitor(app_handle.clone());
+            info!("op=setup | status=end | night_light_monitor=started");
             Ok(())
         })
         .plugin(tauri_plugin_window_state::Builder::new().build())

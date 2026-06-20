@@ -161,40 +161,49 @@ function App() {
   }, [tauriReady]);
 
   useEffect(() => {
-    logger.info("跟随系统", `useEffect执行, mode=${AppData?.mode}, open=${AppData?.open}, tauriReady=${tauriReady}`);
+    logger.info("跟随系统", `mode=${AppData?.mode}, open=${AppData?.open}, tauriReady=${tauriReady}`);
     if (!tauriReady || AppData?.mode !== 'system' || !AppData?.open) {
-      logger.info("跟随系统", '条件不满足，跳过轮询');
+      logger.info("跟随系统", '条件不满足，跳过事件监听');
       return;
     }
-    logger.info("跟随系统", '启动轮询');
-    let isMounted = true;
-    let prevNightLight: boolean | null = null;
-    const checkTheme = async () => {
+    logger.info("跟随系统", '启动事件监听');
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    const init = async () => {
       try {
         const nightLightOn = await invoke<boolean>('get_night_light_state');
-        logger.debug("跟随系统", `夜灯状态: nightLightOn=${nightLightOn}, themeDack=${themeDack}, prevNightLight=${prevNightLight}`);
-        if (prevNightLight !== null && prevNightLight === nightLightOn) {
-          return;
-        }
-        prevNightLight = nightLightOn;
-        if (isMounted) {
-          const shouldBeDark = nightLightOn;
-          logger.info("跟随系统", `夜灯${nightLightOn ? '开启' : '关闭'}，切换主题: dark=${shouldBeDark}`);
-          setThemeDack(shouldBeDark);
-          await invoke('set_system_theme', { isLight: !shouldBeDark });
+        if (!cancelled) {
+          logger.info("跟随系统", `初始夜灯状态: ${nightLightOn}`);
+          setThemeDack(nightLightOn);
+          await invoke('set_system_theme', { isLight: !nightLightOn });
         }
       } catch (e) {
-        logger.warn("跟随系统", `获取夜灯状态失败: ${e}`);
+        logger.warn("跟随系统", `获取初始夜灯状态失败: ${e}`);
+      }
+
+      if (!cancelled) {
+        const unlisten = await listen<boolean>('night-light-changed', async (event) => {
+          const shouldBeDark = event.payload;
+          logger.info("跟随系统", `夜灯状态变更: nightLightOn=${shouldBeDark}`);
+          setThemeDack(shouldBeDark);
+          try {
+            await invoke('set_system_theme', { isLight: !shouldBeDark });
+          } catch (e) {
+            logger.error("跟随系统", `切换主题失败: ${e}`);
+          }
+        });
+        cleanup = unlisten;
       }
     };
-    checkTheme();
-    const timer = setInterval(checkTheme, 3000);
+    init();
+
     return () => {
-      logger.info("跟随系统", '清理轮询');
-      isMounted = false;
-      clearInterval(timer);
+      logger.info("跟随系统", '清理事件监听');
+      cancelled = true;
+      if (cleanup) cleanup();
     };
-  }, [tauriReady, AppData?.mode, AppData?.open, themeDack]);
+  }, [tauriReady, AppData?.mode, AppData?.open]);
   const StartRady = async () => {
     const presentTime = dayjs();
     const startTime = dayjs(AppData?.times?.[0], 'HH:mm');
