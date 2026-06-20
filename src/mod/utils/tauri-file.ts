@@ -1,6 +1,7 @@
 // tauri-file.ts
 import { useEffect, useState } from 'react';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { logger } from './logger';
 
 // module-level cache：path -> objectUrl
 const objectUrlCache = new Map<string, string>();
@@ -65,7 +66,7 @@ export function useLocalImageUrl(path?: string): { src: string; loading: boolean
           setError(null);
         }
       } catch (e) {
-        console.error('useLocalImageUrl read failed', e);
+        logger.error('tauri-file', 'useLocalImageUrl read failed', e);
         if (mounted) {
           setError(e as Error);
           setLoading(false);

@@ -2,6 +2,7 @@ import { ThemeConfig, theme } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { AppDataType } from "../Type";
 import { platform, version } from '@tauri-apps/plugin-os';
+import { logger } from "./utils/logger";
 
 let _isWin11 = false;
 const isWin11Promise = _isWindows11().then(v => { _isWin11 = v; }).catch(() => {});
@@ -18,7 +19,7 @@ async function _isWindows11() {
 
     const osVersion = await version();
     const parts = osVersion.split('.');
-    console.log(parts, osVersion);
+    logger.debug("ThemeConfig", parts, osVersion);
     if (parts.length >= 3 && parts[0] === '10' && parts[1] === '0') {
         const build = parseInt(parts[2], 10);
         return build >= 22000;

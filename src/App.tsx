@@ -21,7 +21,8 @@ import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
 import { Updates } from "./updates";
 import { applyTheme } from "./mod/applyTheme";
-import { info, warn } from "@tauri-apps/plugin-log";
+import { logger } from "./mod/utils/logger";
+
 async function fetchAppVersion() {
   try {
     const version = await getVersion();
@@ -80,7 +81,7 @@ function App() {
       try {
         const unlisten = await listen("switch", async () => {
         if (!isMounted) return;
-        console.log("switch dark", !themeDack);
+        logger.debug("App", "switch dark", !themeDack);
         if (spinning) return;
         const isVisible = await window.appWindow.isVisible()
         setSpinning(true);
@@ -91,7 +92,7 @@ function App() {
           window.Webview?.show()
           setTimeout(() => {
             window.appWindow.isVisible().then(async (_isVisible) => {
-              console.log("isVisible", _isVisible);
+              logger.debug("App", "isVisible", _isVisible);
               if (!_isVisible) {
                 window.Webview?.hide()
               }
@@ -106,12 +107,12 @@ function App() {
           try {
             unlisten();
           } catch (cleanupError) {
-            console.warn('Error while cleaning up listener:', cleanupError);
+            logger.warn("App", 'Error while cleaning up listener:', cleanupError);
           }
         }
       };
     } catch (e) {
-      console.warn('Failed to setup listener:', e);
+      logger.warn("App", 'Failed to setup listener:', e);
       return () => {};
     }
   };
@@ -136,15 +137,19 @@ function App() {
   useEffect(() => { //初始化 -主题自适应
     if (!tauriReady) return
     const handleChange = function (this: any) {
+      logger.info("App", `系统颜色方案变更: prefers-color-scheme=${this.matches ? 'light' : 'dark'}`);
       setThemeDack(!this.matches);
       setSpinning(false)
     };
     matchMedia.addEventListener('change', handleChange);
     if (AppData?.open && AppData?.mode === 'manual') {
+      logger.info("App", "初始化时触发 StartRady");
       StartRady()
     }
     const isAutostart = async () => {
-      setData({ Autostart: await isEnabled() })
+      const enabled = await isEnabled();
+      logger.info("App", `开机自启状态: ${enabled}`);
+      setData({ Autostart: enabled })
     }
     isAutostart()
     setTimeout(() => {
@@ -156,36 +161,36 @@ function App() {
   }, [tauriReady]);
 
   useEffect(() => {
-    info(`[跟随系统] useEffect执行, mode=${AppData?.mode}, open=${AppData?.open}, tauriReady=${tauriReady}`);
+    logger.info("跟随系统", `useEffect执行, mode=${AppData?.mode}, open=${AppData?.open}, tauriReady=${tauriReady}`);
     if (!tauriReady || AppData?.mode !== 'system' || !AppData?.open) {
-      info('[跟随系统] 条件不满足，跳过轮询');
+      logger.info("跟随系统", '条件不满足，跳过轮询');
       return;
     }
-    info('[跟随系统] 启动轮询');
+    logger.info("跟随系统", '启动轮询');
     let isMounted = true;
     let prevNightLight: boolean | null = null;
     const checkTheme = async () => {
       try {
         const nightLightOn = await invoke<boolean>('get_night_light_state');
-        info(`[跟随系统] 夜灯状态: nightLightOn=${nightLightOn}, themeDack=${themeDack}, prevNightLight=${prevNightLight}`);
+        logger.debug("跟随系统", `夜灯状态: nightLightOn=${nightLightOn}, themeDack=${themeDack}, prevNightLight=${prevNightLight}`);
         if (prevNightLight !== null && prevNightLight === nightLightOn) {
           return;
         }
         prevNightLight = nightLightOn;
         if (isMounted) {
           const shouldBeDark = nightLightOn;
-          info(`[跟随系统] 夜灯${nightLightOn ? '开启' : '关闭'}，切换主题: dark=${shouldBeDark}`);
+          logger.info("跟随系统", `夜灯${nightLightOn ? '开启' : '关闭'}，切换主题: dark=${shouldBeDark}`);
           setThemeDack(shouldBeDark);
           await invoke('set_system_theme', { isLight: !shouldBeDark });
         }
       } catch (e) {
-        warn(`[跟随系统] 获取夜灯状态失败: ${e}`);
+        logger.warn("跟随系统", `获取夜灯状态失败: ${e}`);
       }
     };
     checkTheme();
     const timer = setInterval(checkTheme, 3000);
     return () => {
-      info('[跟随系统] 清理轮询');
+      logger.info("跟随系统", '清理轮询');
       isMounted = false;
       clearInterval(timer);
     };
@@ -198,17 +203,22 @@ function App() {
     if (presentTime.isAfter(startTime) && presentTime.isBefore(endTime)) {
       isLight = true;
     }
+    logger.info("StartRady", `当前=${presentTime.format('HH:mm')}, 时段=[${AppData?.times?.[0]}-${AppData?.times?.[1]}], isLight=${isLight}, themeDack=${themeDack}`);
     if (themeDack === isLight) {
       setSpinning(true);
       try {
         if (AppData.StyemThemeEnable) {
+          logger.info("StartRady", "StyemThemeEnable=true, 内部切换主题");
           setThemeDack(!isLight)
           return
         }
+        logger.info("StartRady", `调用 set_system_theme, isLight=${isLight}`);
         await invoke('set_system_theme', { isLight });
       } finally {
         setSpinning(false);
       }
+    } else {
+      logger.debug("StartRady", `主题无需变更 (themeDack=${themeDack} !== isLight=${isLight})`);
     }
   };
 
@@ -220,10 +230,10 @@ function App() {
     }
     if (AppData?.times?.[0] && AppData?.times?.[1]) {
       const onTaskExecute = async (time: string, data: { msg: string }) => {
-        console.log(`执行任务: ${time}, 数据:`, data);
+        logger.info("Crontab", `执行任务: ${time}, 数据:`, data);
         switch (data.msg) {
           case 'TypeA':
-            console.log(`执行任务: ${time}, 数据:`, data.msg);
+            logger.info("Crontab", `执行任务: ${time}, 数据:`, data.msg);
             if (AppData.StyemThemeEnable) {
               setThemeDack(false)
               return
@@ -231,7 +241,7 @@ function App() {
             await invoke('set_system_theme', { isLight: true });
             break;
           case 'TypeB':
-            console.log(`执行任务: ${time}, 数据:`, data.msg);
+            logger.info("Crontab", `执行任务: ${time}, 数据:`, data.msg);
             if (AppData.StyemThemeEnable) {
               setThemeDack(true)
               return
@@ -239,7 +249,7 @@ function App() {
             await invoke('set_system_theme', { isLight: false });
             break;
         }
-        console.log(CrontabManager.listTasks());
+        logger.debug("Crontab", CrontabManager.listTasks());
       };
       try {
         // 添加定时任务
@@ -247,9 +257,9 @@ function App() {
         const task2: CrontabTask = { time: AppData?.times[1], data: { msg: 'TypeB' }, onExecute: onTaskExecute };
         CrontabManager.addTask(task1);
         CrontabManager.addTask(task2);
-        console.log('Tasks added successfully', CrontabManager.listTasks());
+        logger.info("Crontab", 'Tasks added successfully', CrontabManager.listTasks());
       } catch (error) {
-        console.error('Failed to add tasks:', error);
+        logger.error("Crontab", 'Failed to add tasks:', error);
       }
     }
     return () => {
@@ -258,7 +268,7 @@ function App() {
   }, [AppData?.times, AppData?.open, AppData?.mode, AppData.StyemThemeEnable])
 
   useUpdateEffect(() => {
-    console.log(AppData?.open, AppData.StyemThemeEnable);
+    logger.debug("App", AppData?.open, AppData.StyemThemeEnable);
 
     if (!AppData?.open || !AppData.StyemThemeEnable) return
 

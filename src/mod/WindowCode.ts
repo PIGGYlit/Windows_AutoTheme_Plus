@@ -4,6 +4,7 @@ import { Window, Effect } from '@tauri-apps/api/window';
 import { AppDataType } from "../Type";
 import { listen } from "@tauri-apps/api/event";
 import { saveWindowState, StateFlags } from "@tauri-apps/plugin-window-state";
+import { logger } from "./utils/logger";
 
 export function waitForTauri(): Promise<void> {
   return new Promise(resolve => {
@@ -32,6 +33,7 @@ export async function initWindow() {
 
     appWindow.onCloseRequested(e => {
       e.preventDefault()
+      logger.info("Window", "用户关闭窗口，隐藏到托盘");
       setTimeout(() => {
         appWindow.hide()
         Webview.hide()
@@ -40,26 +42,33 @@ export async function initWindow() {
     })
 
     listen("show-app", async () => {
-      console.log("显示程序");
+      logger.info("Window", "显示程序");
       Webview.show()
     });
     listen("close-app", async () => {
-      console.log("收到后端关闭指令，正在退出应用...");
+      logger.info("Window", "收到后端关闭指令，正在退出应用...");
       appWindow.hide()
       Webview.hide()
       saveWindowState(StateFlags.ALL)
       await appWindow.destroy();
     });
   } catch (e) {
-    console.error('initWindow failed:', e)
+    logger.error("Window", 'initWindow failed:', e)
   }
 }
 
 export const WindowBg = (AppData: AppDataType, themeDack: boolean) => {
-  if (!appWindow) return
+  if (!appWindow) {
+    logger.warn("WindowBg", "appWindow 未初始化，跳过");
+    return
+  }
   if (AppData?.winBgEffect) {
-    const types = AppData.winBgEffect === 'Acrylic' ? Effect.Acrylic : (themeDack ? Effect.Mica : Effect.Tabbed)
-    appWindow.setEffects({ effects: [types] })
+    const effect = AppData.winBgEffect === 'Acrylic' ? Effect.Acrylic : (themeDack ? Effect.Mica : Effect.Tabbed)
+    const effectName = AppData.winBgEffect === 'Acrylic' ? 'Acrylic' : (themeDack ? 'Mica' : 'Tabbed')
+    logger.info("WindowBg", `设置窗口效果: ${effectName}, themeDark=${themeDack}`);
+    appWindow.setEffects({ effects: [effect] })
+  } else {
+    logger.debug("WindowBg", "winBgEffect 未设置，跳过");
   }
 }
 export const MainWindow = (setMainShow: (e: boolean) => void, AppData: AppDataType) => {
@@ -67,9 +76,11 @@ export const MainWindow = (setMainShow: (e: boolean) => void, AppData: AppDataTy
     (async  () => {
       if (!appWindow) return
       if (AppData?.StartShow) {
+        logger.info("MainWindow", "StartShow=true，显示窗口");
         appWindow.show()
         setMainShow(true)
       } else {
+        logger.info("MainWindow", "StartShow=false，根据可见性设置");
         if (await appWindow.isVisible()) {
           Webview.show()
         }else{
@@ -80,15 +91,16 @@ export const MainWindow = (setMainShow: (e: boolean) => void, AppData: AppDataTy
 
     const visibilitychange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('页面变得可见');
+        logger.info("Window", '页面变得可见');
         setMainShow(true)
       } else {
-        console.log('页面变得不可见');
+        logger.info("Window", '页面变得不可见');
         setMainShow(false)
       }
     }
     if (appWindow) {
       appWindow.onFocusChanged(async () => {
+        logger.debug("Window", "窗口焦点变化");
         if (await appWindow.isVisible()) {
           Webview.show()
         }

@@ -1,3 +1,5 @@
+import { logger } from "./utils/logger";
+
 export interface UpdateType {
     releaseNotes: string;
     latestVersion: string;
@@ -33,7 +35,7 @@ export interface UpdateType {
   }
   
   export async function checkForUpdates(currentVersion: string): Promise<UpdateType | null> {
-    const repo = "PIGGYlit/Windows_AutoTheme";
+    const repo = "PIGGYlit/Windows_AutoTheme_Plus";
     const apiUrl = `https://api.github.com/repos/${repo}/releases?per_page=100`;
     try {
       const response = await fetch(apiUrl);
@@ -56,12 +58,12 @@ export interface UpdateType {
           !r.tag_name.includes("next") &&
           formatVersion(r.tag_name).startsWith(`${currentBase}-beta.`)
         );
-       // console.log("筛选出的 beta 版本:", betaReleases.map((r: any) => formatVersion(r.tag_name)));
         betaReleases.sort((a: any, b: any) => {
           const aBeta = parseBetaVersion(formatVersion(a.tag_name))?.beta || 0;
           const bBeta = parseBetaVersion(formatVersion(b.tag_name))?.beta || 0;
           return aBeta - bBeta;
         });
+
         const latestBeta = betaReleases.find((r: any) => {
           const candidateBeta = parseBetaVersion(formatVersion(r.tag_name))?.beta || 0;
           return candidateBeta > currentBeta;
@@ -72,12 +74,12 @@ export interface UpdateType {
             releaseNotes: latestBeta.body,
             releaseUrl: latestBeta.html_url,
           };
-          console.log(`检测到新测试版本: v${update.latestVersion}`);
+          logger.info("Update", `检测到新测试版本: v${update.latestVersion}`);
           return update;
         } else {
           // 2. 如果没有新的 beta，回退检测正式版更新
           const officialReleases = releases.filter((r: any) => !r.prerelease && !r.draft);
-          console.log("beta fallback - 正式版本:", officialReleases.map((r: any) => formatVersion(r.tag_name)));
+          logger.debug("Update", "beta fallback - 正式版本:", officialReleases.map((r: any) => formatVersion(r.tag_name)));
           // 优先查找与基础版本完全匹配的正式版
           const matchingOfficial = officialReleases.find((r: any) =>
             formatVersion(r.tag_name) === currentBase
@@ -91,7 +93,7 @@ export interface UpdateType {
                 releaseNotes: matchingOfficial.body,
                 releaseUrl: matchingOfficial.html_url,
               };
-              console.log(`beta fallback - 检测到正式版更新: v${update.latestVersion}`);
+              logger.info("Update", `beta fallback - 检测到正式版更新: v${update.latestVersion}`);
               return update;
             }
           }
@@ -106,7 +108,7 @@ export interface UpdateType {
                 releaseNotes: latestOfficial.body,
                 releaseUrl: latestOfficial.html_url,
               };
-              console.log(`beta fallback - 检测到正式版更新: v${update.latestVersion}`);
+              logger.info("Update", `beta fallback - 检测到正式版更新: v${update.latestVersion}`);
               return update;
             }
           }
@@ -115,24 +117,23 @@ export interface UpdateType {
       } else {
         // 正式版逻辑，只检测正式发布（排除 draft 与 prerelease）
         const officialReleases = releases.filter((r: any) => !r.prerelease && !r.draft);
-       // console.log("筛选出的正式版本:", officialReleases.map((r: any) => formatVersion(r.tag_name)));
         if (officialReleases.length === 0) return null;
         officialReleases.sort((a: any, b: any) => compareVersions(formatVersion(a.tag_name), formatVersion(b.tag_name)));
         const latestOfficial = officialReleases[officialReleases.length - 1];
-        console.log("当前版本:", currentVerFormatted, "最新正式版本:", formatVersion(latestOfficial.tag_name));
+        logger.info("Update", "当前版本:", currentVerFormatted, "最新正式版本:", formatVersion(latestOfficial.tag_name));
         if (isNewerVersion(currentVerFormatted, formatVersion(latestOfficial.tag_name))) {
           update = {
             latestVersion: formatVersion(latestOfficial.tag_name),
             releaseNotes: latestOfficial.body,
             releaseUrl: latestOfficial.html_url,
           };
-          console.log(`检测到新正式版本: v${update.latestVersion}`);
+          logger.info("Update", `检测到新正式版本: v${update.latestVersion}`);
           return update;
         }
         return null;
       }
     } catch (error) {
-      console.error("检测更新失败:", error);
+      logger.error("Update", "检测更新失败:", error);
       return null;
     }
   }

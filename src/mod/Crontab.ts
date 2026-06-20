@@ -1,4 +1,6 @@
 // 定义任务类型
+import { logger } from "./utils/logger";
+
 export interface CrontabTask {
   time: string; // 任务时间（HH:mm）
   data: any; // 任务数据
@@ -57,7 +59,7 @@ export class CrontabManager {
       clearTimeout(task.timeout);
       clearInterval(task.interval);
       CrontabManager.tasks.delete(time);
-      console.log(`已删除定时任务: ${time}`);
+      logger.info("Crontab", `已删除定时任务: ${time}`);
     }
   }
 
@@ -70,7 +72,7 @@ export class CrontabManager {
       clearInterval(interval);
     });
     CrontabManager.tasks.clear();
-    console.log("所有定时任务已清除");
+    logger.info("Crontab", "所有定时任务已清除");
   }
 
   /**

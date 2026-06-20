@@ -1,4 +1,5 @@
 import { enable, disable } from "@tauri-apps/plugin-autostart"
+import { backendLog } from "./utils/logger"
 import { TimePicker, Button, Segmented, Tooltip, Space } from "antd"
 import dayjs from "dayjs"
 import { TimesProps } from "../Type"
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react"
 import { QuestionOutlined } from "@ant-design/icons"
 import { invoke } from "@tauri-apps/api/core"
 import { getIsWin11 } from "./ThemeConfig"
+import { logger } from "./utils/logger"
 import ThemeSelector from "../com/ThemeSelector"
 import DataSave from "./DataSave"
 export interface mainsType {
@@ -43,8 +45,14 @@ const Mainoption: MainopType = ({
     const [startOpenLoad, setStartOpenLoad] = useState(false)
     const [openThemeSelector, setOpenThemeSelector] = useState(false)
     const [win11, setWin11] = useState(false);
-    useEffect(() => { getIsWin11().then(setWin11); }, []);
+    useEffect(() => {
+        getIsWin11().then((v) => {
+            logger.debug("Mainoption", `Win11 检测结果: ${v}`);
+            setWin11(v);
+        });
+    }, []);
     const upTary = (e: string) => { //更新托盘数据
+        logger.info("Mainoption", `更新托盘菜单: tooltip=${e}`);
         invoke('update_tray_menu_item_title', {
             quit: locale?.quit,
             show: locale?.show,
@@ -56,24 +64,32 @@ const Mainoption: MainopType = ({
         if (!tauriReady) return
         if (locale?.quit) {
             const tooltip = `${locale?.Title} - App \n${locale.Time}: ${AppData?.times?.[0]} - ${AppData?.times?.[1]}`
+            logger.debug("Mainoption", `触发托盘更新: times=[${AppData?.times}]`);
             upTary(tooltip)
         }
     }, [locale, AppData?.times, themeDack, tauriReady])
     const AutostartOpen = async (e: boolean) => {
         setStartOpenLoad(true)
+        logger.info("Autostart", `设置开机自启: ${e}`);
         try {
             if (e) {
                 await enable();
+                logger.info("Autostart", "开机自启已启用");
+                backendLog.info("开机自启已启用");
             } else {
                 disable();
+                logger.info("Autostart", "开机自启已禁用");
+                backendLog.info("开机自启已禁用");
             }
             setData({ Autostart: e })
         } catch (error) {
+            logger.error("Autostart", "设置失败:", error);
             messageApi.error(error as string)
         }
         setStartOpenLoad(false)
     }
     const handleTimeChange = (_e: any, dateStrings: [string, string]) => {  //更改时间
+        logger.info("Mainoption", `时间段变更: [${dateStrings[0]} - ${dateStrings[1]}]`);
         setData({ times: dateStrings })
     }
     const startTime = dayjs(AppData?.times?.[0] || '08:08', 'HH:mm')
@@ -93,6 +109,7 @@ const Mainoption: MainopType = ({
             label: locale?.main?.open,
             defaultvalue: AppData?.open,
             change: (e: boolean) => {
+                logger.info("Mainoption", `总开关: ${e}`);
                 setData({ open: e })
             }
         },
@@ -102,7 +119,10 @@ const Mainoption: MainopType = ({
             change: <Segmented
                 shape="round"
                 value={AppData?.mode || 'system'}
-                onChange={e => setData({ mode: e as 'system' | 'manual' })}
+                onChange={e => {
+                    logger.info("Mainoption", `切换模式: ${e}`);
+                    setData({ mode: e as 'system' | 'manual' });
+                }}
                 options={[
                     { value: 'system', label: locale?.main?.modeSystem },
                     { value: 'manual', label: locale?.main?.modeManual },
@@ -141,8 +161,11 @@ const Mainoption: MainopType = ({
             change: <Segmented
                 shape="round"
                 value={AppData?.winBgEffect}
-                onChange={e => setData({ winBgEffect: e })
-                }
+                onChange={e => {
+                    logger.info("Mainoption", `切换窗口背景: ${e}`);
+                    backendLog.info(`切换窗口背景: ${e}`);
+                    setData({ winBgEffect: e });
+                }}
                 options={[
                     { value: 'Default', label: locale?.main?.Default },
                     { value: 'Mica', label: locale?.main?.Mica, disabled: !win11 },
@@ -161,7 +184,11 @@ const Mainoption: MainopType = ({
             key: "StartShow",
             label: locale?.main?.StartShow,
             defaultvalue: AppData?.StartShow,
-            change: ((e: boolean) => setData({ StartShow: e }))
+            change: ((e: boolean) => {
+                logger.info("Mainoption", `启动时显示窗口: ${e}`);
+                backendLog.info(`启动时显示窗口: ${e}`);
+                setData({ StartShow: e });
+            })
         }
     ];
     return { mains }

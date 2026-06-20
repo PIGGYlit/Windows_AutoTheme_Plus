@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { AppDataType } from "../Type";
+import { logger } from "./utils/logger";
 
 
 // 深度合并函数
@@ -55,16 +56,16 @@ const useAppDataStore = create<AppDataStore>()(
       AppData: defaultAppData,
 
       setData: (update: Partial<AppDataType>) => {
+        const keys = Object.keys(update).join(', ');
+        logger.info("DataSave", `状态更新: {${keys}}`, update);
         set((state) => {
           const prevData = state.AppData || defaultAppData;
 
-          // 创建更新后的对象
           const updatedData = {
             ...prevData,
             ...update,
           };
 
-          // 确保language字段有效
           if (!updatedData.language || updatedData.language === '') {
             updatedData.language = 'zh_CN';
           }

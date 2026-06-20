@@ -1,5 +1,6 @@
 import type { AppDataType } from '../Type';
 import { useEffect, useState } from "react";
+import { logger } from "../mod/utils/logger";
 
 interface Props {
   AppData?: AppDataType;
@@ -12,6 +13,7 @@ const Language = ({ AppData, setData }: Props) => {
 
   useEffect(() => {
     if (!AppData?.language) {
+      logger.debug("Language", "语言未设置，默认 zh_CN");
       setData({ language: 'zh_CN' });
     }
   }, []);
@@ -23,7 +25,7 @@ const Language = ({ AppData, setData }: Props) => {
         const mod = await import('./zh-CN.json');
         setLocale(mod.default);
       } catch (error) {
-        console.error('Failed to load locale:', error);
+        logger.error('Language', 'Failed to load locale:', error);
         setLocale({});
       } finally {
         setLoading(false);

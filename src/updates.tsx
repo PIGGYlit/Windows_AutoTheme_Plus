@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Markdown from 'react-markdown'
 import { AppDataType } from "./Type";
 import { UpdateType, checkForUpdates } from "./mod/update";
+import { logger, backendLog } from "./mod/utils/logger";
 
 
 interface Props {
@@ -22,16 +23,26 @@ const Updates: React.FC<Props> = ({ version, locale, setData, AppData }) => {
     setIsModalOpen(false);
   }
   const updates = () => {
+    logger.info("Updates", `检查更新开始, 当前版本: ${version}`);
+    backendLog.info(`检查更新: 当前版本 ${version}`);
     setBtnLoad(true)
     checkForUpdates(version).then((update) => {
       if (update) {
+        logger.info("Updates", `发现新版本: ${update.latestVersion}`);
+        backendLog.info(`发现新版本: ${update.latestVersion}`);
         setUpdate(update)
         if (update.latestVersion != AppData.Skipversion) {
           showModal()
+        } else {
+          logger.info("Updates", `已跳过版本 ${update.latestVersion}`);
         }
       } else {
+        logger.info("Updates", "当前已是最新版本");
         setUpdate(undefined)
       }
+      setBtnLoad(false)
+    }).catch(e => {
+      logger.error("Updates", "检查更新失败:", e);
       setBtnLoad(false)
     });
   }
@@ -45,8 +56,10 @@ const Updates: React.FC<Props> = ({ version, locale, setData, AppData }) => {
   };
   const onClickbtn = () => {
     if (update) {
+      backendLog.info(`打开 GitHub release: ${update.latestVersion}`);
       showModal()
     } else {
+      backendLog.info("手动触发检查更新");
       updates()
     }
   }

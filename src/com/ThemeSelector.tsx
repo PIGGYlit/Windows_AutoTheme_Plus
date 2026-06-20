@@ -3,6 +3,7 @@ import { Modal, Segmented, Row, Col, Card, message, Spin, Space, Typography, Swi
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeWindowsPath } from '../mod/utils/path';
 import { useLocalImageUrl } from '../mod/utils/tauri-file';
+import { logger } from '../mod/utils/logger';
 import { motion, AnimatePresence, Variants, Transition, LayoutGroup } from 'framer-motion';
 import { MoonOutlined, SunOutlined, WarningOutlined } from '@ant-design/icons';
 import useAppData from '../mod/DataSave'
@@ -86,8 +87,9 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({
           const firstDark = processed.find((t) => t.system_mode?.toLowerCase() === 'dark');
           if (firstDark) setSelectedDarkTheme(firstDark.path);
         }
+        logger.info("ThemeSelector", `获取到 ${themesData.length} 个主题`);
       } catch (err) {
-        console.error('获取主题列表失败:', err);
+        logger.error('ThemeSelector', '获取主题列表失败:', err);
         message.error('获取主题列表失败');
       } finally {
         setTimeout(() => {
@@ -103,17 +105,22 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   const lightThemes = themes.filter((t) => t.app_mode?.toLowerCase() === 'light');
   const darkThemes = themes.filter((t) => t.app_mode?.toLowerCase() === 'dark');
   const handleOk = (e: boolean) => {
+    logger.info("ThemeSelector", `主题切换开关: ${e}`);
     setData({
       StyemThemeEnable: e
     })
   };
 
-  const handleCancel = () => setIsModalOpen(false);
+  const handleCancel = () => {
+    logger.debug("ThemeSelector", "关闭主题选择弹窗");
+    setIsModalOpen(false);
+  };
 
   const getCurrentThemes = () => (currentMode === 'light' ? lightThemes : darkThemes);
   const getCurrentSelected = () => (currentMode === 'light' ? selectedLightTheme : selectedDarkTheme);
 
   const handleCardClick = (themePath: string) => {
+    logger.info("ThemeSelector", `选择${currentMode}主题: ${themePath}`);
     if (currentMode === 'light') setSelectedLightTheme(themePath);
     else setSelectedDarkTheme(themePath);
   };
@@ -303,7 +310,10 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({
           <Segmented
             value={currentMode}
             shape="round"
-            onChange={(value) => setCurrentMode(value as 'light' | 'dark')}
+            onChange={(value) => {
+              logger.info("ThemeSelector", `切换显示模式: ${value}`);
+              setCurrentMode(value as 'light' | 'dark');
+            }}
             options={[
               { value: 'light', label: `${locale?.ThemeLight} (${lightThemes.length})` },
               { value: 'dark', label: `${locale?.ThemeDark} (${darkThemes.length})` },

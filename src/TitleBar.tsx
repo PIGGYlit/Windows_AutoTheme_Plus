@@ -6,6 +6,7 @@ import Logo from "./assets/logo.svg?react";
 import { Window } from '@tauri-apps/api/window'; // 引入 appWindow
 //import { motion } from 'framer-motion'; // 引入 framer-motion
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from "./mod/utils/logger";
 import Close from "./assets/closed.svg?react";
 import Mins from './assets/min.svg?react';
 import usePageTitle from './mod/PageTitle'
@@ -31,6 +32,7 @@ const TitleButton: ButtonProps[] = [
         onClick: e => {
             // @ts-ignore
             e.target?.blur()
+            logger.debug("TitleBar", "最小化窗口");
             appWindow.minimize()
         }
     },
@@ -41,6 +43,7 @@ const TitleButton: ButtonProps[] = [
         onClick: e => {
             // @ts-ignore
             e.target?.blur()
+            logger.debug("TitleBar", "关闭窗口");
             appWindow.close()
         }
     }
@@ -49,6 +52,7 @@ const upWindowTitle = async (PageTitle: string) => {
     if (typeof PageTitle === "string") {
         const { waitForTauri } = await import('./mod/WindowCode');
         await waitForTauri();
+        logger.debug("TitleBar", `设置窗口标题: ${PageTitle}`);
         await appWindow.setTitle(PageTitle)
     }
 }
@@ -68,16 +72,17 @@ const App: React.FC<Props> = ({ config, Themeconfig, themeDack, locale, setSpinn
             const { restoreStateCurrent, StateFlags } = await import('@tauri-apps/plugin-window-state');
             restoreStateCurrent(StateFlags.ALL);
         } catch (e) {
-            console.warn('restoreStateCurrent failed:', e)
+            logger.warn("TitleBar", 'restoreStateCurrent failed:', e)
         }
     }, [])
     async function changeTheme() {
         try {
             setSpinning(true)
+            logger.info("TitleBar", `手动切换主题: isLight=${themeDack}`);
             await invoke('set_system_theme', { isLight: themeDack });
-            console.log('主题切换到:', themeDack);
+            logger.info("TitleBar", "主题切换成功");
         } catch (error) {
-            console.error('Error changing theme:', error);
+            logger.error("TitleBar", '主题切换失败:', error);
         } finally {
             setSpinning(false)
         }

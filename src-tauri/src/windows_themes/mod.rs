@@ -1,3 +1,4 @@
+use log::{debug, warn};
 use configparser::ini::Ini;
 use dirs;
 use encoding_rs;
@@ -21,13 +22,16 @@ pub struct ThemeInfo {
 
 /// 获取所有主题（系统 + 用户），壁纸路径转换为绝对路径
 pub fn get_all_themes() -> Vec<ThemeInfo> {
+    debug!("op=get_all_themes | status=start");
     let mut themes = vec![];
 
     themes.extend(get_system_themes());
+    debug!("op=get_all_themes | source=system | count={}", themes.len());
     themes.extend(get_user_themes());
+    debug!("op=get_all_themes | source=user+system | total={}", themes.len());
 
-    // 获取当前激活主题
     let current = get_current_theme().unwrap_or(None);
+    debug!("op=get_all_themes | active={:?}", current);
 
     // 标记激活主题
     for theme in &mut themes {
@@ -50,33 +54,35 @@ pub fn get_all_themes() -> Vec<ThemeInfo> {
         theme.app_mode = app_mode;
     }
 
+    debug!("op=get_all_themes | status=end | total={}", themes.len());
     themes
 }
 
 /// 新增：读取主题文件的模式信息
 fn read_theme_modes(theme_path: &Path) -> (Option<String>, Option<String>) {
+    let path_display = theme_path.display();
     let content = if theme_path.to_string_lossy().contains("Users") {
-        // 对用户主题使用专门的编码处理
         read_user_theme_with_correct_encoding(theme_path)
     } else {
-        // 对系统主题使用常规处理
         read_file_with_fallback_encoding(theme_path)
     };
     
     if content.is_empty() {
+        debug!("op=read_theme_modes | path={} | result=empty", path_display);
         return (None, None);
     }
     
-    // 方法1: 使用 configparser 解析
     if let Ok((sys_mode, app_mode_val)) = parse_modes_with_configparser(&content) {
         if sys_mode.is_some() || app_mode_val.is_some() {
+            debug!("op=read_theme_modes | method=configparser | sys={:?} | app={:?}", sys_mode, app_mode_val);
             return (sys_mode, app_mode_val);
         }
     }
     
-    // 方法2: 使用手动解析
     let (sys_mode, app_mode_val) = parse_modes_manually(&content);
-    
+    if sys_mode.is_none() && app_mode_val.is_none() {
+        debug!("op=read_theme_modes | method=manual | result=none | path={}", path_display);
+    }
     (sys_mode, app_mode_val)
 }
 
@@ -84,7 +90,10 @@ fn read_theme_modes(theme_path: &Path) -> (Option<String>, Option<String>) {
 fn parse_modes_with_configparser(content: &str) -> Result<(Option<String>, Option<String>), Box<dyn std::error::Error>> {
     let mut config = Ini::new();
     config.set_default_section("");
-    config.read(content.to_string())?;
+    if let Err(e) = config.read(content.to_string()) {
+        debug!("op=parse_modes | method=configparser | result=fail | err={}", e);
+        return Err(e.into());
+    }
     
     let mut system_mode = None;
     let mut app_mode = None;
@@ -237,17 +246,21 @@ pub fn get_system_themes() -> Vec<ThemeInfo> {
 pub fn get_user_themes() -> Vec<ThemeInfo> {
     if let Some(user_path) = dirs::data_local_dir() {
         let theme_path = user_path.join("Microsoft").join("Windows").join("Themes");
+        debug!("op=get_user_themes | dir={:?}", theme_path);
         read_themes_from_dir(&theme_path)
     } else {
+        warn!("op=get_user_themes | result=fail | reason=no_localappdata");
         vec![]
     }
 }
 
 /// 从目录读取主题
 fn read_themes_from_dir(dir: &Path) -> Vec<ThemeInfo> {
+    debug!("op=read_themes_from_dir | dir={:?}", dir);
     let mut result = vec![];
 
     if let Ok(entries) = fs::read_dir(dir) {
+        debug!("op=read_themes_from_dir | action=open_dir | result=ok");
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_file()
@@ -272,135 +285,147 @@ fn read_themes_from_dir(dir: &Path) -> Vec<ThemeInfo> {
                 });
             }
         }
+    } else {
+        warn!("op=read_themes_from_dir | action=open_dir | result=fail | dir={:?}", dir);
     }
 
+    debug!("op=read_themes_from_dir | count={} | dir={:?}", result.len(), dir);
     result
 }
 
-/// 获取当前激活主题（注册表）
 fn get_current_theme() -> Result<Option<String>, Box<dyn std::error::Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let theme_key = hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes")?;
-    let theme_mru: String = theme_key.get_value("CurrentTheme")?;
+    let theme_key = match hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes") {
+        Ok(key) => key,
+        Err(e) => {
+            warn!("op=get_current_theme | action=open_key | result=fail | err={}", e);
+            return Err(e.into());
+        }
+    };
+    let theme_mru: String = match theme_key.get_value("CurrentTheme") {
+        Ok(val) => val,
+        Err(e) => {
+            warn!("op=get_current_theme | action=read_value | result=fail | key=CurrentTheme | err={}", e);
+            return Err(e.into());
+        }
+    };
     let current_theme = theme_mru.split(';').next().map(|s| expand_env_vars(s));
+    debug!("op=get_current_theme | theme={:?}", current_theme);
     Ok(current_theme)
 }
 
 /// 使用多种方法读取主题文件中的 Wallpaper
 fn read_wallpaper_from_theme(theme_path: &Path) -> Option<String> {
-    // 检查是否是用户主题（路径包含 Users 或 用户名）
+    let path_display = theme_path.display();
+    debug!("op=read_wallpaper | path={}", path_display);
     let is_user_theme = theme_path.to_string_lossy().contains("Users");
     
     let content = if is_user_theme {
-        // 对用户主题使用专门的编码处理
         read_user_theme_with_correct_encoding(theme_path)
     } else {
-        // 对系统主题使用常规处理
         read_file_with_fallback_encoding(theme_path)
     };
     
     if content.is_empty() {
+        debug!("op=read_wallpaper | result=empty | path={}", path_display);
         return None;
     }
     
-    // 检查是否是 aero.theme 并特别处理
     if theme_path.file_name().unwrap_or_default() == "aero.theme" {
         return parse_aero_theme_specially(&content);
     }
     
-    // 方法1: 使用 configparser 解析
     if let Some(wallpaper) = parse_with_configparser(&content) {
         return Some(wallpaper);
     }
     
-    // 方法2: 使用简化手动解析
     if let Some(wallpaper) = parse_wallpaper_simple(&content) {
         return Some(wallpaper);
     }
     
-    // 方法3: 使用增强手动解析
     if let Some(wallpaper) = parse_wallpaper_enhanced(&content) {
         return Some(wallpaper);
     }
     
+    warn!("op=read_wallpaper | result=fail | all_methods_exhausted | path={}", path_display);
     None
 }
 
 /// 尝试多种编码读取文件
 fn read_file_with_fallback_encoding(theme_path: &Path) -> String {
-    // 首先尝试 UTF-8
+    let path_display = theme_path.display();
+    debug!("op=read_file | path={} | type=system", path_display);
     if let Ok(content) = fs::read_to_string(theme_path) {
         return content;
     }
     
-    // 然后尝试 UTF-16 LE
     if let Some(content) = read_utf16_le_file(theme_path) {
         return content;
     }
     
-    // 尝试使用 encoding_rs 检测编码
     if let Ok(bytes) = fs::read(theme_path) {
-        // 检测编码
         let (content, _, had_errors) = encoding_rs::UTF_16LE.decode(&bytes);
         if !had_errors {
             return content.into_owned();
         }
         
-        // 尝试 GBK 编码（中文Windows常用）
         let (content, _, had_errors) = encoding_rs::GBK.decode(&bytes);
         if !had_errors {
             return content.into_owned();
         }
         
-        // 最后尝试 Latin-1
+        debug!("op=read_file | encoding=latin1_fallback | path={}", path_display);
         return bytes.iter().map(|&b| b as char).collect::<String>();
     }
     
+    warn!("op=read_file | result=fail | cannot_read | path={}", path_display);
     String::new()
 }
 
 /// 专门处理用户主题文件的编码问题
 fn read_user_theme_with_correct_encoding(theme_path: &Path) -> String {
+    let path_display = theme_path.display();
+    debug!("op=read_file | path={} | type=user", path_display);
     if let Ok(bytes) = fs::read(theme_path) {
-        // 优先尝试 UTF-16 LE
         if let Some(content) = read_utf16_le_file(theme_path) {
             return content;
         }
         
-        // 尝试 GB18030 (中文Windows标准)
         let (content, _, had_errors) = encoding_rs::GB18030.decode(&bytes);
         if !had_errors {
             return content.into_owned();
         }
         
-        // 尝试 GBK
         let (content, _, had_errors) = encoding_rs::GBK.decode(&bytes);
         if !had_errors {
             return content.into_owned();
         }
         
-        // 尝试 UTF-8
         if let Ok(content) = String::from_utf8(bytes.clone()) {
             return content;
         }
         
-        // 最后尝试系统本地编码
+        debug!("op=read_file | encoding=windows1252_fallback | path={}", path_display);
         let (content, _, _) = encoding_rs::WINDOWS_1252.decode(&bytes);
         return content.into_owned();
     }
     
+    warn!("op=read_file | result=fail | cannot_read | path={}", path_display);
     String::new()
 }
 
 /// 读取 UTF-16 LE 编码的文件
 fn read_utf16_le_file(path: &Path) -> Option<String> {
-    let bytes = fs::read(path).ok()?;
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(_) => return None,
+    };
     
     if bytes.len() < 2 {
+        debug!("op=read_utf16le | result=too_short | len={}", bytes.len());
         return None;
     }
     
-    // 检查 BOM
     let (start_index, is_utf16) = if bytes[0] == 0xFF && bytes[1] == 0xFE {
         (2, true)
     } else {
@@ -415,6 +440,7 @@ fn read_utf16_le_file(path: &Path) -> Option<String> {
         
         String::from_utf16(&u16_chars).ok()
     } else {
+        debug!("op=read_utf16le | result=not_utf16 | len={}", bytes.len());
         None
     }
 }
