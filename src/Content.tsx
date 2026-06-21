@@ -45,8 +45,8 @@ const Content: React.FC<props> = ({ mains, language }) => (
                         {typeof item.change === 'function' ? (
                             <Switch
                                 loading={item.loading}
-                                defaultValue={item.defaultvalue}
-                                value={item.value as boolean}
+                                defaultChecked={item.defaultvalue}
+                                checked={item.value as boolean}
                                 onChange={item.change} />
                         ) : (
                             <div>{item.change}</div>

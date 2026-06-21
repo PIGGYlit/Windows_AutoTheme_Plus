@@ -10,6 +10,7 @@ import { logger } from "./mod/utils/logger";
 import Close from "./assets/closed.svg?react";
 import Mins from './assets/min.svg?react';
 import usePageTitle from './mod/PageTitle'
+import useAppData from './mod/DataSave'
 import { useAsyncEffect, useRequest } from 'ahooks';
 const { Text } = Typography;
 interface Props {
@@ -57,6 +58,7 @@ const upWindowTitle = async (PageTitle: string) => {
     }
 }
 const App: React.FC<Props> = ({ config, Themeconfig, themeDack, locale, setSpinning, spinning }) => {
+    const { setData } = useAppData()
     const PageTitle = usePageTitle()
     const { run } = useRequest(upWindowTitle, {
         debounceWait: 1000,
@@ -79,8 +81,9 @@ const App: React.FC<Props> = ({ config, Themeconfig, themeDack, locale, setSpinn
         try {
             setSpinning(true)
             logger.info("TitleBar", `手动切换主题: isLight=${themeDack}`);
+            setData({ open: false });
             await invoke('set_system_theme', { isLight: themeDack });
-            logger.info("TitleBar", "主题切换成功");
+            logger.info("TitleBar", "主题切换成功，mode=manual");
         } catch (error) {
             logger.error("TitleBar", '主题切换失败:', error);
         } finally {

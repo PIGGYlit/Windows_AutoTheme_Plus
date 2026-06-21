@@ -76,6 +76,7 @@ function App() {
         if (spinning) return;
         const isVisible = await window.appWindow.isVisible()
         setSpinning(true);
+        setData({ open: false });
         setTimeout(async () => {
           await invoke('set_system_theme', { isLight: themeDack });
         }, 10);

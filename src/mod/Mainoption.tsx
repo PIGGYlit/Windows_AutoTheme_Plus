@@ -108,6 +108,7 @@ const Mainoption: MainopType = ({
             key: 'open',
             label: locale?.main?.open,
             defaultvalue: AppData?.open,
+            value: AppData?.open,
             change: (e: boolean) => {
                 logger.info("Mainoption", `总开关: ${e}`);
                 setData({ open: e })
