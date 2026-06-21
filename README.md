@@ -1,14 +1,14 @@
-# Windows AutoTheme
+# Windows AutoTheme Plus
 
 <div align="center">
-  <img src="img/Follow_the_system.png" alt="跟随系统模式" width="100%">
+  <img src="img/automatically-switch-wallpapers.png" alt="自动切换壁纸" width="100%">
 
   #### Language: [中文](/README.md)
 </div>
 
 ## 概述
 
-**Windows AutoTheme** 是一个轻量级的 Windows 主题自动切换工具。支持根据 Windows **夜灯（护眼模式）** 状态自动切换系统亮/暗主题，也支持按固定时间定时切换。
+**Windows AutoTheme Plus** 是一个轻量级的 Windows 主题自动切换工具。支持根据 Windows **夜灯（护眼模式）** 状态自动切换系统亮/暗主题，也支持按固定时间定时切换。
 
 后端使用 Rust 执行系统操作，前端采用 TypeScript + Ant Design 5 构建界面。
 
@@ -37,10 +37,6 @@
 
 > 该方式利用 Windows 原生的夜灯计划功能，无需额外配置日出日落 API。
 
-<div align="center">
-  <img src="img/Follow_the_system.png" alt="跟随系统模式" width="80%">
-</div>
-
 ### 模式二：手动定时
 
 设置两个时间点：
@@ -48,17 +44,13 @@
 - `HH:mm` 到 `HH:mm` 之间 → **浅色主题**
 - 其余时间 → **深色主题**
 
-<div align="center">
-  <img src="img/Custom_time.png" alt="手动定时" width="80%">
-</div>
-
 ---
 
 ## 截图
 
 <div align="center">
-  <img src="img/DaytimeMode.png" alt="日间模式" width="45%" style="margin-right: 5%;">
-  <img src="img/NightMode.png" alt="夜间模式" width="45%">
+  <img src="img/light.png" alt="浅色模式" width="45%" style="margin-right: 5%;">
+  <img src="img/dark.png" alt="深色模式" width="45%">
 </div>
 
 ---
