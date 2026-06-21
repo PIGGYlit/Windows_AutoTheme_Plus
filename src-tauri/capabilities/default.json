@@ -25,6 +25,7 @@
     "autostart:allow-is-enabled",
     "window-state:allow-save-window-state",
     "log:default",
+    "dialog:default",
     "fs:allow-stat",
     "fs:allow-read",
     "fs:read-all",

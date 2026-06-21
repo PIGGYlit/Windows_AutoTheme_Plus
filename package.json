@@ -16,6 +16,7 @@
     "@ant-design/pro-components": "^2.8.10",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-autostart": "^2",
+    "@tauri-apps/plugin-dialog": "2.7.1",
     "@tauri-apps/plugin-fs": "2.5.1",
     "@tauri-apps/plugin-http": "^2",
     "@tauri-apps/plugin-log": "2.8.0",

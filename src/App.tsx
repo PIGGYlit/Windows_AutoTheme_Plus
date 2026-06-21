@@ -19,7 +19,6 @@ import { WindowBg, initWindow, waitForTauri } from "./mod/WindowCode";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
 import { Updates } from "./updates";
-import { applyTheme } from "./mod/applyTheme";
 import { logger } from "./mod/utils/logger";
 
 declare const __APP_VERSION__: string;
@@ -42,14 +41,17 @@ function App() {
       setSpinning(false)
       initWindow()
       setTimeout(async () => {
-        if (!window.appWindow) return
-        const isVisible = await window.appWindow.isVisible()
-        if (isVisible) {
-          window.Webview?.show()
+        if (!window.appWindow || !window.Webview) return
+        if (AppData?.StartShow) {
+          logger.info("App", "StartShow=true，显示窗口");
+          await window.appWindow.show()
+          window.Webview.show()
         } else {
-          window.Webview?.hide()
+          const isVisible = await window.appWindow.isVisible()
+          if (isVisible) window.Webview.show()
+          else window.Webview.hide()
         }
-      }, 3000);
+      }, 1000);
     })
   }, [])
 
@@ -120,7 +122,7 @@ function App() {
     if (AppData?.open && AppData?.mode === 'manual') {
       StartRady()
     }
-  }, [AppData?.times, AppData?.open, AppData?.mode, AppData?.StyemThemeEnable, tauriReady])
+  }, [AppData?.times, AppData?.open, AppData?.mode, tauriReady])
   //设置窗口材料
   useEffect(() => {
     if (!tauriReady) return
@@ -208,11 +210,6 @@ function App() {
     if (themeDack === isLight) {
       setSpinning(true);
       try {
-        if (AppData.StyemThemeEnable) {
-          logger.info("StartRady", "StyemThemeEnable=true, 内部切换主题");
-          setThemeDack(!isLight)
-          return
-        }
         logger.info("StartRady", `调用 set_system_theme, isLight=${isLight}`);
         await invoke('set_system_theme', { isLight });
       } finally {
@@ -235,18 +232,10 @@ function App() {
         switch (data.msg) {
           case 'TypeA':
             logger.info("Crontab", `执行任务: ${time}, 数据:`, data.msg);
-            if (AppData.StyemThemeEnable) {
-              setThemeDack(false)
-              return
-            }
             await invoke('set_system_theme', { isLight: true });
             break;
           case 'TypeB':
             logger.info("Crontab", `执行任务: ${time}, 数据:`, data.msg);
-            if (AppData.StyemThemeEnable) {
-              setThemeDack(true)
-              return
-            }
             await invoke('set_system_theme', { isLight: false });
             break;
         }
@@ -266,17 +255,21 @@ function App() {
     return () => {
       CrontabManager.clearAllTasks()
     };
-  }, [AppData?.times, AppData?.open, AppData?.mode, AppData.StyemThemeEnable])
+  }, [AppData?.times, AppData?.open, AppData?.mode])
 
   useUpdateEffect(() => {
-    logger.debug("App", AppData?.open, AppData.StyemThemeEnable);
+    logger.info("Wallpaper", `themeDack=${themeDack}, applying wallpaper`);
 
-    if (!AppData?.open || !AppData.StyemThemeEnable) return
-
-    if (AppData.StyemTheme) {
-      applyTheme(AppData.StyemTheme[themeDack ? 1 : 0])
+    if (AppData.CustomWallpaperEnable) {
+      const wallpaperPath = themeDack ? AppData.CustomWallpaperDark : AppData.CustomWallpaperLight;
+      if (wallpaperPath) {
+        invoke('set_wallpaper', { imagePath: wallpaperPath }).catch(e => {
+          logger.error("Wallpaper", `设置壁纸失败: ${e}`);
+        });
+      }
     }
-  }, [themeDack, AppData?.open, AppData.StyemTheme, AppData.StyemThemeEnable])
+  }, [themeDack,
+      AppData.CustomWallpaperEnable, AppData.CustomWallpaperLight, AppData.CustomWallpaperDark])
   const { Themeconfig, antdToken } = ThemeFun(themeDack, AppData?.winBgEffect)
   const animationVariants = (index: number) => ({
     initial: {

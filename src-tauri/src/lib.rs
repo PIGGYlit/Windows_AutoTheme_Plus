@@ -43,15 +43,7 @@ fn session_id() -> &'static str {
 }
 
 fn format_timestamp() -> String {
-    let d = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let total_ms = d.as_millis();
-    let ms = total_ms % 1000;
-    let s = (total_ms / 1000) % 60;
-    let m = (total_ms / 60000) % 60;
-    let h = (total_ms / 3600000) % 24;
-    format!("{:02}:{:02}:{:02}.{:03}", h, m, s, ms)
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string()
 }
 
 const CLOUDSTORE_SUBKEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\default$windows.data.bluelightreduction.bluelightreductionstate\\windows.data.bluelightreduction.bluelightreductionstate";
@@ -210,9 +202,9 @@ async fn set_system_theme(is_light: bool) {
             Err(e) => error!("op=set_system_theme | target=registry | key={} | result=fail | err={}", reg_key, e),
         }
     }
-    info!("op=set_system_theme | target=broadcast | action=WM_SETTINGCHANGE");
-    notify_system_theme_changed().await;
     tokio::spawn(async move {
+        info!("op=set_system_theme | target=broadcast | action=WM_SETTINGCHANGE");
+        notify_system_theme_changed().await;
         sleep(Duration::from_millis(155)).await;
         debug!("op=set_system_theme | target=broadcast | action=retry_delayed");
         notify_system_theme_changed().await;
@@ -448,6 +440,26 @@ async fn apply_theme(theme_path: String) -> Result<(), String> {
     result
 }
 
+#[tauri::command]
+fn set_wallpaper(image_path: String) -> Result<(), String> {
+    info!("op=set_wallpaper | status=start | path={}", &image_path);
+    unsafe {
+        let wide: Vec<u16> = OsStr::new(&image_path).encode_wide().chain(Some(0)).collect();
+        let result = winapi::um::winuser::SystemParametersInfoW(
+            winapi::um::winuser::SPI_SETDESKWALLPAPER,
+            0,
+            wide.as_ptr() as *mut c_void,
+            winapi::um::winuser::SPIF_UPDATEINIFILE | winapi::um::winuser::SPIF_SENDWININICHANGE,
+        );
+        if result == 0 {
+            error!("op=set_wallpaper | result=fail | path={}", &image_path);
+            return Err("设置壁纸失败".into());
+        }
+        info!("op=set_wallpaper | status=end | path={} | result=ok", &image_path);
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let log_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs");
@@ -460,81 +472,41 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .max_file_size(5 * 1024 * 1024)
+                .format(|out, message, record| {
+                    let color = match record.level() {
+                        log::Level::Error => "\x1b[31;1m",
+                        log::Level::Warn => "\x1b[33;1m",
+                        log::Level::Info => "\x1b[36m",
+                        log::Level::Debug => "\x1b[90m",
+                        _ => "\x1b[0m",
+                    };
+                    let level_name = match record.level() {
+                        log::Level::Error => "ERROR",
+                        log::Level::Warn => "WARN",
+                        log::Level::Info => "INFO",
+                        log::Level::Debug => "DEBUG",
+                        log::Level::Trace => "TRACE",
+                    };
+                    let file = record.file().and_then(|f| f.rsplit_once(['/', '\\']).map(|(_, n)| n)).unwrap_or("?");
+                    let line = record.line().unwrap_or(0);
+                    out.finish(format_args!(
+                        "{color}[{level:5}]\x1b[0m [{ts}] [{sid}] [{file}:{line:<4}] | {message}",
+                        color = color,
+                        level = level_name,
+                        ts = format_timestamp(),
+                        sid = session_id(),
+                        file = file,
+                        line = line,
+                        message = message,
+                    ))
+                })
                 .targets([
-                    Target::new(TargetKind::Stdout)
-                        .format(|out, _, record| {
-                            let color = match record.level() {
-                                log::Level::Error => "\x1b[31;1m",
-                                log::Level::Warn => "\x1b[33;1m",
-                                log::Level::Info => "\x1b[36m",
-                                log::Level::Debug => "\x1b[90m",
-                                _ => "\x1b[0m",
-                            };
-                            let level_name = match record.level() {
-                                log::Level::Error => "ERROR",
-                                log::Level::Warn => "WARN",
-                                log::Level::Info => "INFO",
-                                log::Level::Debug => "DEBUG",
-                                log::Level::Trace => "TRACE",
-                            };
-                            let file = record.file().and_then(|f| f.rsplit_once(['/', '\\']).map(|(_, n)| n)).unwrap_or("?");
-                            let line = record.line().unwrap_or(0);
-                            out.finish(format_args!(
-                                "{color}[{level:5}]\x1b[0m [{ts}] [{sid}] [{file}:{line:<4}] | {args}",
-                                color = color,
-                                level = level_name,
-                                ts = format_timestamp(),
-                                sid = session_id(),
-                                file = file,
-                                line = line,
-                                args = record.args(),
-                            ))
-                        }),
+                    Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::Folder {
                         path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs"),
                         file_name: Some("app.log".to_string()),
-                    })
-                        .format(|out, _, record| {
-                            let level_name = match record.level() {
-                                log::Level::Error => "ERROR",
-                                log::Level::Warn => "WARN",
-                                log::Level::Info => "INFO",
-                                log::Level::Debug => "DEBUG",
-                                log::Level::Trace => "TRACE",
-                            };
-                            let file = record.file().and_then(|f| f.rsplit_once(['/', '\\']).map(|(_, n)| n)).unwrap_or("?");
-                            let line = record.line().unwrap_or(0);
-                            out.finish(format_args!(
-                                "[{level:5}] [{ts}] [{sid}] [{file}:{line:<4}] | {args}",
-                                level = level_name,
-                                ts = format_timestamp(),
-                                sid = session_id(),
-                                file = file,
-                                line = line,
-                                args = record.args(),
-                            ))
-                        }),
-                    Target::new(TargetKind::LogDir { file_name: None })
-                        .format(|out, _, record| {
-                            let level_name = match record.level() {
-                                log::Level::Error => "ERROR",
-                                log::Level::Warn => "WARN",
-                                log::Level::Info => "INFO",
-                                log::Level::Debug => "DEBUG",
-                                log::Level::Trace => "TRACE",
-                            };
-                            let file = record.file().and_then(|f| f.rsplit_once(['/', '\\']).map(|(_, n)| n)).unwrap_or("?");
-                            let line = record.line().unwrap_or(0);
-                            out.finish(format_args!(
-                                "[{level:5}] [{ts}] [{sid}] [{file}:{line:<4}] | {args}",
-                                level = level_name,
-                                ts = format_timestamp(),
-                                sid = session_id(),
-                                file = file,
-                                line = line,
-                                args = record.args(),
-                            ))
-                        }),
+                    }),
+                    Target::new(TargetKind::LogDir { file_name: None }),
                     Target::new(TargetKind::Webview),
                 ])
                 .build(),
@@ -578,6 +550,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             tray: Mutex::new(None),
         })
@@ -587,6 +560,7 @@ pub fn run() {
             get_night_light_state,
             get_windows_themes,
             apply_theme,
+            set_wallpaper,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,12 +1,11 @@
 import { enable, disable } from "@tauri-apps/plugin-autostart"
-import { backendLog } from "./utils/logger"
-import { TimePicker, Button, Segmented, Tooltip, Space } from "antd"
+import { TimePicker, Segmented, Space, Button } from "antd"
 import dayjs from "dayjs"
 import { TimesProps } from "../Type"
 import type { MessageInstance } from "antd/es/message/interface"
 
 import { useEffect, useState } from "react"
-import { QuestionOutlined } from "@ant-design/icons"
+import { PictureOutlined } from "@ant-design/icons"
 import { invoke } from "@tauri-apps/api/core"
 import { getIsWin11 } from "./ThemeConfig"
 import { logger } from "./utils/logger"
@@ -75,11 +74,9 @@ const Mainoption: MainopType = ({
             if (e) {
                 await enable();
                 logger.info("Autostart", "开机自启已启用");
-                backendLog.info("开机自启已启用");
             } else {
                 disable();
                 logger.info("Autostart", "开机自启已禁用");
-                backendLog.info("开机自启已禁用");
             }
             setData({ Autostart: e })
         } catch (error) {
@@ -137,23 +134,20 @@ const Mainoption: MainopType = ({
             change: <Times />
         },
         {
-            key: "switchStyemMode",
-            label: locale?.main?.switchStyemMode,
+            key: "wallpaper",
+            label: locale?.main?.customWallpaper || '自定义壁纸',
             change: <Space>
-                <Tooltip
-                    title={locale?.main?.switchStyemModeTip}
-                >
-                    <Button
-                        icon={<QuestionOutlined />}
-                        type="text"
-                    />
-                </Tooltip>
                 <ThemeSelector
                     locale={locale}
                     isModalOpen={openThemeSelector}
                     setIsModalOpen={setOpenThemeSelector}
                 />
-                <Button onClick={() => setOpenThemeSelector(true)}>设置</Button>
+                <Button icon={<PictureOutlined />} onClick={() => {
+                    logger.info("Wallpaper", "打开壁纸设置");
+                    setOpenThemeSelector(true);
+                }}>
+                    {AppData?.CustomWallpaperEnable ? '已开启' : '已关闭'}
+                </Button>
             </Space>
         },
         {
@@ -164,7 +158,6 @@ const Mainoption: MainopType = ({
                 value={AppData?.winBgEffect}
                 onChange={e => {
                     logger.info("Mainoption", `切换窗口背景: ${e}`);
-                    backendLog.info(`切换窗口背景: ${e}`);
                     setData({ winBgEffect: e });
                 }}
                 options={[
@@ -187,7 +180,6 @@ const Mainoption: MainopType = ({
             defaultvalue: AppData?.StartShow,
             change: ((e: boolean) => {
                 logger.info("Mainoption", `启动时显示窗口: ${e}`);
-                backendLog.info(`启动时显示窗口: ${e}`);
                 setData({ StartShow: e });
             })
         }

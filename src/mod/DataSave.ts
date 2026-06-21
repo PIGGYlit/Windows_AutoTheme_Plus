@@ -41,8 +41,9 @@ const defaultAppData: AppDataType = {
   StartShow: true,
   Skipversion: '',
   winBgEffect: 'Default',
-  StyemTheme: [],
-  StyemThemeEnable: false
+  CustomWallpaperLight: '',
+  CustomWallpaperDark: '',
+  CustomWallpaperEnable: false
 };
 
 interface AppDataStore {

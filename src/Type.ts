@@ -7,9 +7,10 @@ export interface AppDataType {
   StartShow: boolean;
   Skipversion: string;
   winBgEffect: string;
-  //主题选项
-  StyemTheme?: string[];
-  StyemThemeEnable?: boolean
+  //自定义壁纸
+  CustomWallpaperLight?: string;
+  CustomWallpaperDark?: string;
+  CustomWallpaperEnable?: boolean;
 }
 
 export interface TimesProps {

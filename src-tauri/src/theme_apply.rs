@@ -27,6 +27,7 @@ impl ThemeApplier {
         match result {
             Ok(status) if status.success() => {
                 info!("op=apply_theme_by_path | method=start_b | result=ok");
+                let _ = Self::apply_theme_via_registry(theme_path);
                 Ok(())
             }
             Ok(status) => {

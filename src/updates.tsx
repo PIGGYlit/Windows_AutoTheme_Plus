@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Markdown from 'react-markdown'
 import { AppDataType } from "./Type";
 import { UpdateType, checkForUpdates } from "./mod/update";
-import { logger, backendLog } from "./mod/utils/logger";
+import { logger } from "./mod/utils/logger";
 
 
 interface Props {
@@ -24,12 +24,10 @@ const Updates: React.FC<Props> = ({ version, locale, setData, AppData }) => {
   }
   const updates = () => {
     logger.info("Updates", `检查更新开始, 当前版本: ${version}`);
-    backendLog.info(`检查更新: 当前版本 ${version}`);
     setBtnLoad(true)
     checkForUpdates(version).then((update) => {
       if (update) {
         logger.info("Updates", `发现新版本: ${update.latestVersion}`);
-        backendLog.info(`发现新版本: ${update.latestVersion}`);
         setUpdate(update)
         if (update.latestVersion != AppData.Skipversion) {
           showModal()
@@ -56,10 +54,10 @@ const Updates: React.FC<Props> = ({ version, locale, setData, AppData }) => {
   };
   const onClickbtn = () => {
     if (update) {
-      backendLog.info(`打开 GitHub release: ${update.latestVersion}`);
+      logger.info("Updates", `打开 GitHub release: ${update.latestVersion}`);
       showModal()
     } else {
-      backendLog.info("手动触发检查更新");
+      logger.info("Updates", "手动触发检查更新");
       updates()
     }
   }
