@@ -1,6 +1,6 @@
 [package]
 name = "Windows_AutoTheme_Plus"
-version = "1.7.0"
+version = "1.8.0"
 description = "Windows_AutoTheme_Plus"
 authors = ["you"]
 edition = "2021"
